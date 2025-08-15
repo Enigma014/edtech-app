@@ -1,6 +1,6 @@
 import React, { memo, useState } from 'react';
 import { TouchableOpacity, StyleSheet, Text, View } from 'react-native';
-import Background from '../components/Background';
+import Background from '../components/BackGround';
 import Logo from '../components/Logo';
 import Header from '../components/Header';
 import Button from '../components/Button';
@@ -25,7 +25,7 @@ const RegisterScreen = ({ navigation }: Props) => {
     const emailError = emailValidator(email.value);
     const passwordError = passwordValidator(password.value);
     const confirmPasswordError =
-      confirmPassword.value !== password.value ? 'Passwords do not match.' : '';
+      password.value !== confirmPassword.value ? 'Passwords do not match' : '';
 
     if (nameError || emailError || passwordError || confirmPasswordError) {
       setName({ ...name, error: nameError });
@@ -40,20 +40,19 @@ const RegisterScreen = ({ navigation }: Props) => {
 
   return (
     <Background>
-      <BackButton goBack={() => navigation.navigate('HomeScreen')} />
+      <BackButton goBack={() => navigation.navigate('LoginScreen')} />
 
       <Logo />
 
-      <Header>Create Account</Header>
+      <Header>Create Account.</Header>
 
       <TextInput
-        label="Name"
+        label="Full Name"
         returnKeyType="next"
         value={name.value}
         onChangeText={text => setName({ value: text, error: '' })}
         error={!!name.error}
         errorText={name.error}
-        autoCapitalize="words"
       />
 
       <TextInput
@@ -65,7 +64,6 @@ const RegisterScreen = ({ navigation }: Props) => {
         errorText={email.error}
         autoCapitalize="none"
         autoComplete="email"
-        keyboardType="email-address"
       />
 
       <TextInput

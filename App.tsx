@@ -1,38 +1,40 @@
 import React from 'react';
 import { StatusBar, useColorScheme, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { NativeBaseProvider, extendTheme } from 'native-base';
+import { NativeBaseProvider } from 'native-base';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
 import LoginScreen from './src/auth/Login';
+import RegisterScreen from './src/auth/Register';
 
-// Optional: extend theme if needed
-const theme = extendTheme({
-  colors: {
-    primary: '#6200ee',
-    secondary: '#03dac6',
-    surface: '#ffffff',
-    error: '#B00020',
-  },
-});
+const Stack = createNativeStackNavigator();
 
-const App: React.FC = () => {
+const App = () => {
   const isDarkMode = useColorScheme() === 'dark';
 
   return (
     <SafeAreaProvider>
-      <NativeBaseProvider theme={theme}>
-        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-        <View style={styles.container}>
-          <LoginScreen navigation={{ navigate: () => {} } as any} />
-        </View>
+      <NativeBaseProvider>
+        <NavigationContainer>
+          <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+          <Stack.Navigator initialRouteName="LoginScreen">
+            <Stack.Screen
+              name="LoginScreen"
+              component={LoginScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="RegisterScreen"
+              component={RegisterScreen}
+              options={{ headerShown: false }}
+            />
+
+          </Stack.Navigator>
+        </NavigationContainer>
       </NativeBaseProvider>
     </SafeAreaProvider>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
 
 export default App;
