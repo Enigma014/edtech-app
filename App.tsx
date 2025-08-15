@@ -1,44 +1,33 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- *
- * @format
- */
-import { Text } from 'react-native';
+import React from 'react';
+import { StatusBar, useColorScheme, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NativeBaseProvider, extendTheme } from 'native-base';
 import LoginScreen from './src/auth/Login';
-//import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  //useSafeAreaInsets,
-} from 'react-native-safe-area-context';
 
+// Optional: extend theme if needed
+const theme = extendTheme({
+  colors: {
+    primary: '#6200ee',
+    secondary: '#03dac6',
+    surface: '#ffffff',
+    error: '#B00020',
+  },
+});
 
-function App() {
+const App: React.FC = () => {
   const isDarkMode = useColorScheme() === 'dark';
 
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-      <LoginScreen/>
+      <NativeBaseProvider theme={theme}>
+        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+        <View style={styles.container}>
+          <LoginScreen navigation={{ navigate: () => {} } as any} />
+        </View>
+      </NativeBaseProvider>
     </SafeAreaProvider>
   );
-}
-
-function AppContent() {
-  //const safeAreaInsets = useSafeAreaInsets();
-
-  return (
-    <View style={styles.container}>
-      <Text> HelloWorld! </Text>
-      <Text> HelloWorld! </Text>
-      <Text> HelloWorld! </Text>
-      <Text> HelloWorld! </Text>
-      <Text> HelloWorld! </Text>
-    </View>
-  );
-}
+};
 
 const styles = StyleSheet.create({
   container: {

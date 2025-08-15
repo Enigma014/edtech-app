@@ -1,27 +1,36 @@
 import React, { memo } from 'react';
-import { StyleSheet, Text, TextInput as NativeInput } from 'react-native';
-import { Input, Item, Label } from 'native-base';
+import { StyleSheet } from 'react-native';
+import { Input, FormControl } from 'native-base';
 import { theme } from '../core/theme';
 
-type Props = React.ComponentProps<typeof NativeInput> & {
-  error?: boolean;
+interface TextInputProps {
   label?: string;
   errorText?: string;
-};
+  value?: string;
+  onChangeText?: (text: string) => void;
+  placeholder?: string;
+  secureTextEntry?: boolean;
+  [key: string]: any; // allow other props like keyboardType, etc.
+}
 
-const TextInput = ({ label, errorText, ...props }: Props) => (
-  <>
-    <Item floatingLabel style={styles.container}>
-      <Label style={styles.label}>{label}</Label>
+const TextInput: React.FC<TextInputProps> = ({
+  label,
+  errorText,
+  ...props
+}) => {
+  return (
+    <FormControl isInvalid={!!errorText} style={styles.container}>
+      {label && <FormControl.Label _text={{ color: theme.colors.secondary }}>{label}</FormControl.Label>}
       <Input
+        {...props}
         style={styles.input}
         selectionColor={theme.colors.primary}
-        {...props}
+        placeholderTextColor={theme.colors.secondary + '99'} // subtle placeholder
       />
-    </Item>
-    {errorText ? <Text style={styles.error}>{errorText}</Text> : null}
-  </>
-);
+      {errorText && <FormControl.ErrorMessage>{errorText}</FormControl.ErrorMessage>}
+    </FormControl>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -29,19 +38,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   input: {
-    width: '100%',
     color: theme.colors.secondary,
-  },
-  label: {
-    color: theme.colors.secondary,
-    paddingLeft: 4,
-    opacity: 0.8,
-  },
-  error: {
-    width: '100%',
-    fontSize: 14,
-    color: theme.colors.error,
-    paddingHorizontal: 4,
   },
 });
 

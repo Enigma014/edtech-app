@@ -3,26 +3,32 @@ import {
   ImageBackground,
   StyleSheet,
   KeyboardAvoidingView,
-  Text,
+  Platform,
+  View,
 } from 'react-native';
 import { theme } from '../core/theme';
 
-type Props = {
+interface BackgroundProps {
   children: React.ReactNode;
-};
+  style?: object; // optional style override
+}
 
-const Background = ({ children }: Props) => (
-//   <ImageBackground
-//     source={require('../assets/background_dot.png')}
-//     resizeMode="repeat"
-//     style={styles.background}
-//   >
-//     <KeyboardAvoidingView style={styles.container} behavior="padding">
-//       {children}
-//     </KeyboardAvoidingView>
-//   </ImageBackground>
-<Text>HI</Text>
-);
+const Background: React.FC<BackgroundProps> = ({ children, style }) => {
+  return (
+    <ImageBackground
+      source={require('../assets/background_dot.png')}
+      resizeMode="repeat"
+      style={[styles.background, style]}
+    >
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {children}
+      </KeyboardAvoidingView>
+    </ImageBackground>
+  );
+};
 
 const styles = StyleSheet.create({
   background: {

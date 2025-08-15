@@ -1,45 +1,39 @@
 import React, { memo } from 'react';
 import { StyleSheet } from 'react-native';
-import { Button as NativeButton, Text } from 'native-base';
+import { Button as NativeButton, IButtonProps, Text } from 'native-base';
 import { theme } from '../core/theme';
 
-type Props = React.ComponentProps<typeof NativeButton> & { title: string };
+interface ButtonProps extends IButtonProps {
+  title: string;
+  bordered?: boolean;
+}
 
-const Button = ({ bordered, style, title, ...props }: Props) => (
-  <NativeButton
-    full
-    style={[
-      styles.button,
-      {
-        backgroundColor: bordered ? theme.colors.surface : theme.colors.primary,
-      },
-      style,
-    ]}
-    bordered={bordered}
-    {...props}
-  >
-    <Text
-      style={[
-        styles.text,
-        { color: bordered ? theme.colors.primary : theme.colors.secondary },
-      ]}
+const Button: React.FC<ButtonProps> = ({ bordered = false, style, title, ...props }) => {
+  return (
+    <NativeButton
+      w="100%"
+      style={[styles.button, style] as any} // cast fixes TS error
+      variant={bordered ? 'outline' : 'solid'}
+      borderColor={bordered ? theme.colors.primary : undefined}
+      bg={bordered ? theme.colors.surface : theme.colors.primary}
+      _text={{
+        color: bordered ? theme.colors.primary : theme.colors.secondary,
+        fontWeight: 'bold',
+        fontSize: 16,
+        lineHeight: 26,
+      }}
+      {...props}
     >
       {title}
-    </Text>
-  </NativeButton>
-);
+    </NativeButton>
+
+  );
+};
 
 const styles = StyleSheet.create({
   button: {
-    width: '100%',
     marginVertical: 10,
-    borderRadius: 4,
-    borderColor: theme.colors.buttonBorder,
-  },
-  text: {
-    fontWeight: 'bold',
-    fontSize: 16,
-    lineHeight: 26,
+    borderRadius: 6,
   },
 });
 
