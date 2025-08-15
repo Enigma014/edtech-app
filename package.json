@@ -1,5 +1,5 @@
 {
-  "name": "MyApp",
+  "name": "edtech-app",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -7,13 +7,19 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest",
+    "build:android": "cd android && ./gradlew assembleRelease",
+    "build:ios": "cd ios && xcodebuild -workspace YourApp.xcworkspace -scheme YourApp -configuration Release",
+    "build": "npm run build:android && npm run build:ios"
   },
   "dependencies": {
+    "@react-native/new-app-screen": "0.81.0",
+    "expo": "^53.0.20",
     "react": "19.1.0",
     "react-native": "0.81.0",
-    "@react-native/new-app-screen": "0.81.0",
-    "react-native-safe-area-context": "^5.5.2"
+    "react-native-safe-area-context": "^5.5.2",
+    "react-native-web": "^0.20.0",
+    "react-dom": "19.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

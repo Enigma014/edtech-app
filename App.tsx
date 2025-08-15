@@ -5,7 +5,7 @@
  * @format
  */
 import { Text } from 'react-native';
-
+import LoginScreen from './src/auth/Login';
 //import { NewAppScreen } from '@react-native/new-app-screen';
 import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
 import {
@@ -21,6 +21,7 @@ function App() {
     <SafeAreaProvider>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <AppContent />
+      <LoginScreen/>
     </SafeAreaProvider>
   );
 }
@@ -30,6 +31,10 @@ function AppContent() {
 
   return (
     <View style={styles.container}>
+      <Text> HelloWorld! </Text>
+      <Text> HelloWorld! </Text>
+      <Text> HelloWorld! </Text>
+      <Text> HelloWorld! </Text>
       <Text> HelloWorld! </Text>
     </View>
   );
