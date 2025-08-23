@@ -87,7 +87,7 @@ const RegisterScreen = ({ navigation }: Props) => {
       />
 
       <Button title="Register" onPress={_onRegisterPressed} />
-
+      
       <View style={styles.row}>
         <Text style={styles.label}>Already have an account? </Text>
         <TouchableOpacity onPress={() => navigation.navigate('LoginScreen')}>
@@ -110,6 +110,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: theme.colors.primary,
   },
+  
+  
 });
 
 export default memo(RegisterScreen);

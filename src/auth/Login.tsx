@@ -27,8 +27,9 @@ const LoginScreen = ({ navigation }: Props) => {
       setPassword({ ...password, error: passwordError });
       return;
     }
+    navigation.navigate('HomeScreen');
 
-    navigation.navigate('Dashboard');
+    //navigation.navigate('Dashboard');
   };
 
   return (
@@ -69,13 +70,19 @@ const LoginScreen = ({ navigation }: Props) => {
       </View>
 
       <Button title="Login" onPress={_onLoginPressed} />
-
+      
       <View style={styles.row}>
         <Text style={styles.label}>Don’t have an account? </Text>
         <TouchableOpacity onPress={() => navigation.navigate('RegisterScreen')}>
           <Text style={styles.link}>Sign up</Text>
         </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('HomeScreen')}>
+          <Text style={styles.link}> Home</Text>
+        </TouchableOpacity>
+        
+        
       </View>
+      
     </Background>
   );
 };
@@ -98,6 +105,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: theme.colors.primary,
   },
+  
+  
 });
 
 export default memo(LoginScreen);
