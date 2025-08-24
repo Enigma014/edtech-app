@@ -42,18 +42,15 @@ const LoginScreen = ({ navigation }: Props) => {
 
       <TextInput
         label="Email"
-        returnKeyType="next"
         value={email.value}
         onChangeText={text => setEmail({ value: text, error: '' })}
         error={!!email.error}
         errorText={email.error}
-        autoCapitalize="none"
         autoComplete="email"
       />
 
       <TextInput
         label="Password"
-        returnKeyType="done"
         value={password.value}
         onChangeText={text => setPassword({ value: text, error: '' })}
         error={!!password.error}

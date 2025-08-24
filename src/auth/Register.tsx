@@ -48,7 +48,6 @@ const RegisterScreen = ({ navigation }: Props) => {
 
       <TextInput
         label="Full Name"
-        returnKeyType="next"
         value={name.value}
         onChangeText={text => setName({ value: text, error: '' })}
         error={!!name.error}
@@ -57,18 +56,15 @@ const RegisterScreen = ({ navigation }: Props) => {
 
       <TextInput
         label="Email"
-        returnKeyType="next"
         value={email.value}
         onChangeText={text => setEmail({ value: text, error: '' })}
         error={!!email.error}
         errorText={email.error}
-        autoCapitalize="none"
         autoComplete="email"
       />
 
       <TextInput
         label="Password"
-        returnKeyType="next"
         value={password.value}
         onChangeText={text => setPassword({ value: text, error: '' })}
         error={!!password.error}
@@ -78,7 +74,6 @@ const RegisterScreen = ({ navigation }: Props) => {
 
       <TextInput
         label="Confirm Password"
-        returnKeyType="done"
         value={confirmPassword.value}
         onChangeText={text => setConfirmPassword({ value: text, error: '' })}
         error={!!confirmPassword.error}
