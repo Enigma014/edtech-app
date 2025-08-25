@@ -15,22 +15,22 @@ const Navbar = ({ navigation }: Props) => {
   return (
     <View style={styles.container}>
       <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('HomeScreen')}>
-        <Ionicons name="home-outline" size={28} color={theme.colors.primary} />
+        <Ionicons name="home-outline" size={20} color={theme.colors.primary} />
         <Text style={styles.label}>Home</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ProductScreen')}>
-        <Feather name="shopping-bag" size={28} color={theme.colors.primary} />
+        <Feather name="shopping-bag" size={20} color={theme.colors.primary} />
         <Text style={styles.label}>Products</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('UpdatesScreen')}>
-        <Ionicons name="notifications-outline" size={28} color={theme.colors.primary} />
+        <Ionicons name="notifications-outline" size={20} color={theme.colors.primary} />
         <Text style={styles.label}>Updates</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('CommunityScreen')}>
-        <FontAwesome name="users" size={28} color={theme.colors.primary} />
+        <FontAwesome name="users" size={20} color={theme.colors.primary} />
         <Text style={styles.label}>Community</Text>
       </TouchableOpacity>
     </View>

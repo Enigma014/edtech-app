@@ -19,14 +19,14 @@ const LoginScreen = ({ navigation }: Props) => {
   const [password, setPassword] = useState({ value: '', error: '' });
 
   const _onLoginPressed = () => {
-    const emailError = emailValidator(email.value);
-    const passwordError = passwordValidator(password.value);
+    // const emailError = emailValidator(email.value);
+    // const passwordError = passwordValidator(password.value);
 
-    if (emailError || passwordError) {
-      setEmail({ ...email, error: emailError });
-      setPassword({ ...password, error: passwordError });
-      return;
-    }
+    // if (emailError || passwordError) {
+    //   setEmail({ ...email, error: emailError });
+    //   setPassword({ ...password, error: passwordError });
+    //   return;
+    // }
     navigation.navigate('HomeScreen');
 
     //navigation.navigate('Dashboard');
@@ -73,9 +73,7 @@ const LoginScreen = ({ navigation }: Props) => {
         <TouchableOpacity onPress={() => navigation.navigate('RegisterScreen')}>
           <Text style={styles.link}>Sign up</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('HomeScreen')}>
-          <Text style={styles.link}> Home</Text>
-        </TouchableOpacity>
+        
         
         
       </View>
