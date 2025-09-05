@@ -7,10 +7,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import LoginScreen from './src/auth/Login';
 import RegisterScreen from './src/auth/Register';
-import HomeScreen from './src/screens/Home';
+import SettingsScreen from './src/screens/Settings';
 import CommunityScreen from './src/screens/Community';
-import UpdatesScreen from './src/screens/Updates';
+import ChatScreen from './src/screens/Chat';
 import ProductScreen from './src/screens/Product';
+import SplashScreen from './src/screens/Splash';
+import SubscriptionScreen from './src/screens/Subscription';
 const Stack = createNativeStackNavigator();
 
 const App = () => {
@@ -21,10 +23,10 @@ const App = () => {
       <NativeBaseProvider>
         <NavigationContainer>
           <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-          <Stack.Navigator initialRouteName="LoginScreen">
-            <Stack.Screen
-              name="LoginScreen"
-              component={LoginScreen}
+          <Stack.Navigator initialRouteName="SplashScreen">
+          <Stack.Screen
+              name="SplashScreen"
+              component={SplashScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen
@@ -32,9 +34,20 @@ const App = () => {
               component={RegisterScreen}
               options={{ headerShown: false }}
             />
+            <Stack.Screen
+              name="SubscriptionScreen"
+              component={SubscriptionScreen}
+              options={{ headerShown: false }}
+            />
+            
+            <Stack.Screen
+              name="LoginScreen"
+              component={LoginScreen}
+              options={{ headerShown: false }}
+            />
       <Stack.Screen
-              name="HomeScreen"
-              component={HomeScreen}
+              name="SettingsScreen"
+              component={SettingsScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen
@@ -43,8 +56,8 @@ const App = () => {
               options={{ headerShown: false }}
             />
             <Stack.Screen
-              name="UpdatesScreen"
-              component={UpdatesScreen}
+              name="ChatScreen"
+              component={ChatScreen}
               options={{ headerShown: false }}
             />
             <Stack.Screen

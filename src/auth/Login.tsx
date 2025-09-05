@@ -19,22 +19,22 @@ const LoginScreen = ({ navigation }: Props) => {
   const [password, setPassword] = useState({ value: '', error: '' });
 
   const _onLoginPressed = () => {
-    // const emailError = emailValidator(email.value);
-    // const passwordError = passwordValidator(password.value);
+    const emailError = emailValidator(email.value);
+    const passwordError = passwordValidator(password.value);
 
     // if (emailError || passwordError) {
     //   setEmail({ ...email, error: emailError });
     //   setPassword({ ...password, error: passwordError });
     //   return;
     // }
-    navigation.navigate('HomeScreen');
+    navigation.navigate('ChatScreen');
 
     //navigation.navigate('Dashboard');
   };
 
   return (
     <Background>
-      <BackButton goBack={() => navigation.navigate('HomeScreen')} />
+      <BackButton goBack={() => navigation.navigate('ChatScreen')} />
 
       <Logo />
 

@@ -14,26 +14,29 @@ type Props = {
 const Navbar = ({ navigation }: Props) => {
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('HomeScreen')}>
-        <Ionicons name="home-outline" size={20} color={theme.colors.primary} />
-        <Text style={styles.label}>Home</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ProductScreen')}>
-        <Feather name="shopping-bag" size={20} color={theme.colors.primary} />
-        <Text style={styles.label}>Products</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('UpdatesScreen')}>
-        <Ionicons name="notifications-outline" size={20} color={theme.colors.primary} />
-        <Text style={styles.label}>Updates</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('CommunityScreen')}>
-        <FontAwesome name="users" size={20} color={theme.colors.primary} />
-        <Text style={styles.label}>Community</Text>
-      </TouchableOpacity>
-    </View>
+    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ChatScreen')}>
+      <Ionicons name="chatbubble-outline" size={24} color={'#000'}  />
+      <Text style={styles.label}>Chats</Text>
+    </TouchableOpacity>
+  
+    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('ProductScreen')}>
+      <Ionicons name="bag-outline" size={24} color={'#000'} />
+      <Text style={styles.label}>Products</Text>
+    </TouchableOpacity>
+  
+    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('CommunityScreen')}>
+      <Ionicons name="people-outline" size={24} color={'#000'} />
+      <Text style={styles.label}>Community</Text>
+    </TouchableOpacity>
+  
+    <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('SettingsScreen')}>
+      <Ionicons name="settings-outline" size={24} color={'#000'} />
+      <Text style={styles.label}>Settings</Text>
+    </TouchableOpacity>
+    
+  </View>
+  
+  
   );
 };
 
@@ -41,17 +44,18 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    backgroundColor: theme.colors.surface,
-    paddingVertical: 10,
+    backgroundColor: '#fff',
+    paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.secondary,
+    borderTopColor: '#eee',
+    boxShadow: '0 -2px 5px rgba(0,0,0,0.1)',
   },
   navItem: {
     alignItems: 'center',
   },
   label: {
     fontSize: 12,
-    color: theme.colors.primary,
+    color: '#000',
     marginTop: 4,
   },
 });

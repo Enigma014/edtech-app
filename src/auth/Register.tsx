@@ -27,15 +27,15 @@ const RegisterScreen = ({ navigation }: Props) => {
     const confirmPasswordError =
       password.value !== confirmPassword.value ? 'Passwords do not match' : '';
 
-    if (nameError || emailError || passwordError || confirmPasswordError) {
-      setName({ ...name, error: nameError });
-      setEmail({ ...email, error: emailError });
-      setPassword({ ...password, error: passwordError });
-      setConfirmPassword({ ...confirmPassword, error: confirmPasswordError });
-      return;
-    }
+    // if (nameError || emailError || passwordError || confirmPasswordError) {
+    //   setName({ ...name, error: nameError });
+    //   setEmail({ ...email, error: emailError });
+    //   setPassword({ ...password, error: passwordError });
+    //   setConfirmPassword({ ...confirmPassword, error: confirmPasswordError });
+    //   return;
+    // }
 
-    navigation.navigate('Dashboard');
+    navigation.navigate('SubscriptionScreen');
   };
 
   return (

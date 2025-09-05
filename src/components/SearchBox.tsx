@@ -1,44 +1,30 @@
-// src/components/SearchBox.tsx
 import React from "react";
-import { TextInput, View, StyleSheet } from "react-native";
-import Icon from "react-native-vector-icons/Feather";
+import { View, TextInput } from "react-native";
+import Icon from "react-native-vector-icons/Ionicons";
 
-type Props = {
-  placeholder?: string;
-  value: string;
-  onChangeText: (text: string) => void;
-};
-
-const SearchBox = ({ placeholder, value, onChangeText }: Props) => {
+const SearchBox = () => {
   return (
-    <View style={styles.container}>
-      <Icon name="search" size={20} color="#666" style={styles.icon} />
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#f1f1f1",
+        borderRadius: 25,
+        marginHorizontal: 15,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        marginBottom: 2,
+
+      }}
+    >
+      <Icon name="search-outline" size={20} color="#777" />
       <TextInput
-        placeholder={placeholder}
-        value={value}
-        onChangeText={onChangeText}
-        style={styles.input}
+        placeholder="Search"
+        placeholderTextColor="#777"
+        style={{ flex: 1, marginLeft: 8, fontSize: 16 }}
       />
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f0f0f0",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    marginVertical: 10,
-  },
-  icon: {
-    marginRight: 8,
-  },
-  input: {
-    flex: 1,
-    height: 40,
-  },
-});
 
 export default SearchBox;
