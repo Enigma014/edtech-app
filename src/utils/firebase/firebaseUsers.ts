@@ -1,6 +1,12 @@
 // src/utils/firebaseUsers.ts
 import { getFirestore, doc, setDoc, serverTimestamp } from '@react-native-firebase/firestore';
 
+/**
+ * Creates a user document in Firestore
+ * @param uid - Firebase Auth UID
+ * @param name - Full name of the user
+ * @param email - Email of the user
+ */
 export const createUserInFirestore = async (
   uid: string,
   name: string,
