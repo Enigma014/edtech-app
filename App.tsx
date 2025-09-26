@@ -14,6 +14,8 @@ import ProductScreen from './src/screens/Product';
 import SplashScreen from './src/screens/Splash';
 import SubscriptionScreen from './src/screens/Subscription';
 import ChatDetail from './src/screens/ChatDetail';
+
+import '@utils/firebaseConfig';
 const Stack = createNativeStackNavigator();
 
 const App = () => {

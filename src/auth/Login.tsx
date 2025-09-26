@@ -8,7 +8,7 @@ import TextInput from '../components/TextInput';
 import { theme } from '../core/theme';
 import { emailValidator, passwordValidator } from '../core/utils';
 import { Navigation } from '../types';
-import { FirebaseAuth, firestoreCollections } from '../core/firebaseConfig';
+// import { FirebaseAuth, firestoreCollections } from '@utils/firebaseConfig';
 
 type Props = {
   navigation: Navigation;
@@ -33,26 +33,26 @@ const LoginScreen = ({ navigation }: Props) => {
 
     try {
       console.log('Attempting Firebase login...');
-      const userCredential = await FirebaseAuth.signInWithEmailAndPassword(
-        email.value.trim(),
-        password.value
-      );
-      console.log('Firebase login success:', userCredential.user.uid);
+      // const userCredential = await FirebaseAuth.signInWithEmailAndPassword(
+      //   email.value.trim(),
+      //   password.value
+      // );
+      // console.log('Firebase login success:', userCredential.user.uid);
 
       // Firestore user profile
-      await firestoreCollections.users.doc(userCredential.user.uid).set(
-        {
-          uid: userCredential.user.uid,
-          email: userCredential.user.email,
-          displayName: userCredential.user.displayName || email.value.split('@')[0],
-          photoURL: userCredential.user.photoURL || '',
-          lastLogin: new Date(),
-          createdAt: userCredential.user.metadata.creationTime
-            ? new Date(userCredential.user.metadata.creationTime)
-            : new Date(),
-        },
-        { merge: true }
-      );
+      // await firestoreCollections.users.doc(userCredential.user.uid).set(
+      //   {
+      //     uid: userCredential.user.uid,
+      //     email: userCredential.user.email,
+      //     displayName: userCredential.user.displayName || email.value.split('@')[0],
+      //     photoURL: userCredential.user.photoURL || '',
+      //     lastLogin: new Date(),
+      //     createdAt: userCredential.user.metadata.creationTime
+      //       ? new Date(userCredential.user.metadata.creationTime)
+      //       : new Date(),
+      //   },
+      //   { merge: true }
+      // );
 
       console.log('Firestore user updated');
       setLoading(false);
@@ -115,7 +115,7 @@ const LoginScreen = ({ navigation }: Props) => {
         </TouchableOpacity>
       </View>
 
-      <Button title="Login" onPress={_onLoginPressed} loading={loading} />
+      <Button title="Login" onPress={_onLoginPressed} />
 
       <View style={styles.row}>
         <Text style={styles.label}>Don’t have an account? </Text>

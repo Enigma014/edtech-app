@@ -32,6 +32,11 @@ npm run android
 yarn android
 ```
 
+```sh
+# Logging
+npx react-native log-android 
+```
+
 ### iOS
 
 For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
