@@ -13,6 +13,7 @@ import ChatScreen from './src/screens/Chat';
 import ProductScreen from './src/screens/Product';
 import SplashScreen from './src/screens/Splash';
 import SubscriptionScreen from './src/screens/Subscription';
+import ChatDetail from './src/screens/ChatDetail';
 const Stack = createNativeStackNavigator();
 
 const App = () => {
@@ -58,6 +59,11 @@ const App = () => {
             <Stack.Screen
               name="ChatScreen"
               component={ChatScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ChatDetailScreen"
+              component={ChatDetail}
               options={{ headerShown: false }}
             />
             <Stack.Screen

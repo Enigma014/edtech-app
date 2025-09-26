@@ -1,14 +1,14 @@
 import React, { memo, useState } from 'react';
-import { TouchableOpacity, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity, StyleSheet, Text, View, Alert } from 'react-native';
 import Background from '../components/BackGround';
 import Logo from '../components/Logo';
 import Header from '../components/Header';
 import Button from '../components/Button';
 import TextInput from '../components/TextInput';
-import BackButton from '../components/BackButton';
 import { theme } from '../core/theme';
 import { emailValidator, passwordValidator } from '../core/utils';
 import { Navigation } from '../types';
+import { FirebaseAuth, firestoreCollections } from '../core/firebaseConfig';
 
 type Props = {
   navigation: Navigation;
@@ -17,27 +17,76 @@ type Props = {
 const LoginScreen = ({ navigation }: Props) => {
   const [email, setEmail] = useState({ value: '', error: '' });
   const [password, setPassword] = useState({ value: '', error: '' });
+  const [loading, setLoading] = useState(false);
 
-  const _onLoginPressed = () => {
+  const _onLoginPressed = async () => {
     const emailError = emailValidator(email.value);
     const passwordError = passwordValidator(password.value);
 
-    // if (emailError || passwordError) {
-    //   setEmail({ ...email, error: emailError });
-    //   setPassword({ ...password, error: passwordError });
-    //   return;
-    // }
-    navigation.navigate('ChatScreen');
+    if (emailError || passwordError) {
+      setEmail({ ...email, error: emailError });
+      setPassword({ ...password, error: passwordError });
+      return;
+    }
 
-    //navigation.navigate('Dashboard');
+    setLoading(true);
+
+    try {
+      console.log('Attempting Firebase login...');
+      const userCredential = await FirebaseAuth.signInWithEmailAndPassword(
+        email.value.trim(),
+        password.value
+      );
+      console.log('Firebase login success:', userCredential.user.uid);
+
+      // Firestore user profile
+      await firestoreCollections.users.doc(userCredential.user.uid).set(
+        {
+          uid: userCredential.user.uid,
+          email: userCredential.user.email,
+          displayName: userCredential.user.displayName || email.value.split('@')[0],
+          photoURL: userCredential.user.photoURL || '',
+          lastLogin: new Date(),
+          createdAt: userCredential.user.metadata.creationTime
+            ? new Date(userCredential.user.metadata.creationTime)
+            : new Date(),
+        },
+        { merge: true }
+      );
+
+      console.log('Firestore user updated');
+      setLoading(false);
+      navigation.navigate('ChatScreen');
+    } catch (error: any) {
+      setLoading(false);
+      console.error('Login error:', error);
+
+      let errorMessage = 'Login failed. Please try again.';
+      switch (error.code) {
+        case 'auth/user-not-found':
+          errorMessage = 'No account found with this email.';
+          break;
+        case 'auth/wrong-password':
+          errorMessage = 'Incorrect password.';
+          break;
+        case 'auth/invalid-email':
+          errorMessage = 'Invalid email address.';
+          break;
+        case 'auth/user-disabled':
+          errorMessage = 'This account has been disabled.';
+          break;
+        case 'auth/too-many-requests':
+          errorMessage = 'Too many login attempts. Please try again later.';
+          break;
+      }
+
+      Alert.alert('Error', errorMessage);
+    }
   };
 
   return (
     <Background>
-      <BackButton goBack={() => navigation.navigate('ChatScreen')} />
-
       <Logo />
-
       <Header>Welcome back.</Header>
 
       <TextInput
@@ -66,18 +115,14 @@ const LoginScreen = ({ navigation }: Props) => {
         </TouchableOpacity>
       </View>
 
-      <Button title="Login" onPress={_onLoginPressed} />
-      
+      <Button title="Login" onPress={_onLoginPressed} loading={loading} />
+
       <View style={styles.row}>
         <Text style={styles.label}>Don’t have an account? </Text>
         <TouchableOpacity onPress={() => navigation.navigate('RegisterScreen')}>
           <Text style={styles.link}>Sign up</Text>
         </TouchableOpacity>
-        
-        
-        
       </View>
-      
     </Background>
   );
 };
@@ -100,8 +145,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: theme.colors.primary,
   },
-  
-  
 });
 
 export default memo(LoginScreen);

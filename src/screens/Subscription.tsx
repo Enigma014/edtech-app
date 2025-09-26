@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import Logo from "../components/Logo";
-import { InputRightAddon } from "native-base";
+
 
 const Subscription = ({ navigation }: { navigation: any }) => {
   return (

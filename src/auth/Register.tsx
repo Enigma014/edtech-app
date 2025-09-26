@@ -1,5 +1,5 @@
 import React, { memo, useState } from 'react';
-import { TouchableOpacity, StyleSheet, Text, View } from 'react-native';
+import { TouchableOpacity, StyleSheet, Text, View, Alert } from 'react-native';
 import Background from '../components/BackGround';
 import Logo from '../components/Logo';
 import Header from '../components/Header';
@@ -9,6 +9,8 @@ import BackButton from '../components/BackButton';
 import { theme } from '../core/theme';
 import { emailValidator, passwordValidator, nameValidator } from '../core/utils';
 import { Navigation } from '../types';
+
+import useRegisterStore from '@store/RegisterStore/RegisterStore';
 
 type Props = {
   navigation: Navigation;
@@ -20,22 +22,30 @@ const RegisterScreen = ({ navigation }: Props) => {
   const [password, setPassword] = useState({ value: '', error: '' });
   const [confirmPassword, setConfirmPassword] = useState({ value: '', error: '' });
 
-  const _onRegisterPressed = () => {
+  const register = useRegisterStore((state) => state.register);
+
+  const _onRegisterPressed = async () => {
     const nameError = nameValidator(name.value);
     const emailError = emailValidator(email.value);
     const passwordError = passwordValidator(password.value);
     const confirmPasswordError =
       password.value !== confirmPassword.value ? 'Passwords do not match' : '';
 
-    // if (nameError || emailError || passwordError || confirmPasswordError) {
-    //   setName({ ...name, error: nameError });
-    //   setEmail({ ...email, error: emailError });
-    //   setPassword({ ...password, error: passwordError });
-    //   setConfirmPassword({ ...confirmPassword, error: confirmPasswordError });
-    //   return;
-    // }
+    if (nameError || emailError || passwordError || confirmPasswordError) {
+      setName({ ...name, error: nameError });
+      setEmail({ ...email, error: emailError });
+      setPassword({ ...password, error: passwordError });
+      setConfirmPassword({ ...confirmPassword, error: confirmPasswordError });
+      return;
+    }
 
-    navigation.navigate('SubscriptionScreen');
+    try {
+      await register(name.value, email.value, password.value);
+      Alert.alert('Success', 'Account created successfully!');
+      navigation.navigate('Dashboard');
+    } catch (err: any) {
+      Alert.alert('Registration Error', err.message);
+    }
   };
 
   return (
@@ -105,8 +115,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: theme.colors.primary,
   },
-  
-  
 });
 
 export default memo(RegisterScreen);

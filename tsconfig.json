@@ -1,16 +1,19 @@
 {
   "extends": "@react-native/typescript-config",
   "compilerOptions": {
-    "strict": true,
-    "baseUrl": ".",
+    "baseUrl": "src",
     "paths": {
-      "@/*": ["src/*"]
+      "@utils/*": ["utils/*"],
+      "@store/*": ["store/*"],
+      "@components/*": ["components/*"],
+      "@assets/*": ["assets/*"],
+      "@config/*": ["config/*"]
     },
-    "typeRoots": [
-      "./@types",
-      "./node_modules/@types"
-    ]
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "strict": true
   },
-  "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["**/node_modules", "**/Pods"]
+  "include": ["**/*.ts", "**/*.tsx"]
 }
