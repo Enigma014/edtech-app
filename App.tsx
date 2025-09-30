@@ -14,7 +14,7 @@ import ProductScreen from './src/screens/Product';
 import SplashScreen from './src/screens/Splash';
 import SubscriptionScreen from './src/screens/Subscription';
 import ChatDetail from './src/screens/ChatDetail';
-
+import ProfileScreen from './src/screens/Profile';
 import '@utils/firebaseConfig';
 const Stack = createNativeStackNavigator();
 
@@ -73,7 +73,14 @@ const App = () => {
               component={ProductScreen}
               options={{ headerShown: false }}
             />
+            <Stack.Screen
+              name="ProfileScreen"
+              component={ProfileScreen}
+              options={{ headerShown: false }}
+            />
           </Stack.Navigator>
+          
+
         </NavigationContainer>
       </NativeBaseProvider>
     </SafeAreaProvider>

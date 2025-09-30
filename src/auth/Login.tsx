@@ -1,3 +1,4 @@
+// src/screens/LoginScreen.tsx
 import React, { memo, useState } from 'react';
 import { TouchableOpacity, StyleSheet, Text, View, Alert } from 'react-native';
 import Background from '../components/BackGround';
@@ -8,7 +9,7 @@ import TextInput from '../components/TextInput';
 import { theme } from '../core/theme';
 import { emailValidator, passwordValidator } from '../core/utils';
 import { Navigation } from '../types';
-// import { FirebaseAuth, firestoreCollections } from '@utils/firebaseConfig';
+import { authService, db } from '@utils/firebaseConfig';
 
 type Props = {
   navigation: Navigation;
@@ -33,26 +34,27 @@ const LoginScreen = ({ navigation }: Props) => {
 
     try {
       console.log('Attempting Firebase login...');
-      // const userCredential = await FirebaseAuth.signInWithEmailAndPassword(
-      //   email.value.trim(),
-      //   password.value
-      // );
-      // console.log('Firebase login success:', userCredential.user.uid);
 
-      // Firestore user profile
-      // await firestoreCollections.users.doc(userCredential.user.uid).set(
-      //   {
-      //     uid: userCredential.user.uid,
-      //     email: userCredential.user.email,
-      //     displayName: userCredential.user.displayName || email.value.split('@')[0],
-      //     photoURL: userCredential.user.photoURL || '',
-      //     lastLogin: new Date(),
-      //     createdAt: userCredential.user.metadata.creationTime
-      //       ? new Date(userCredential.user.metadata.creationTime)
-      //       : new Date(),
-      //   },
-      //   { merge: true }
-      // );
+      // ✅ Sign in with Firebase Auth
+      const userCredential = await authService.signInWithEmailAndPassword(
+        email.value.trim(),
+        password.value
+      );
+
+      const user = userCredential.user;
+      console.log('Firebase login success:', user.uid);
+
+      // ✅ Update Firestore user profile (optional but good practice)
+      await db.collection('users').doc(user.uid).set(
+        {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || email.value.split('@')[0],
+          photoURL: user.photoURL || '',
+          lastLogin: new Date(),
+        },
+        { merge: true }
+      );
 
       console.log('Firestore user updated');
       setLoading(false);
@@ -92,7 +94,7 @@ const LoginScreen = ({ navigation }: Props) => {
       <TextInput
         label="Email"
         value={email.value}
-        onChangeText={text => setEmail({ value: text, error: '' })}
+        onChangeText={(text) => setEmail({ value: text, error: '' })}
         error={!!email.error}
         errorText={email.error}
         autoComplete="email"
@@ -101,7 +103,7 @@ const LoginScreen = ({ navigation }: Props) => {
       <TextInput
         label="Password"
         value={password.value}
-        onChangeText={text => setPassword({ value: text, error: '' })}
+        onChangeText={(text) => setPassword({ value: text, error: '' })}
         error={!!password.error}
         errorText={password.error}
         secureTextEntry
@@ -115,7 +117,7 @@ const LoginScreen = ({ navigation }: Props) => {
         </TouchableOpacity>
       </View>
 
-      <Button title="Login" onPress={_onLoginPressed} />
+      <Button title={loading ? 'Logging in...' : 'Login'} onPress={_onLoginPressed} />
 
       <View style={styles.row}>
         <Text style={styles.label}>Don’t have an account? </Text>

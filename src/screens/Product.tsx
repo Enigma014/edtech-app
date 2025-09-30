@@ -68,20 +68,7 @@ const styles = StyleSheet.create({
     fontSize: 16, fontWeight: "600", marginLeft: 20,marginTop:20,marginBottom:15, color: "#000",
   },
 
-  // Cards
-  card: {
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    overflow: "hidden",
-    elevation: 3,
-  },
-  bannerImage: {
-    width: "100%",
-    height: 150,
-    resizeMode: "cover",
-  },
+  
   
   // Search
   
