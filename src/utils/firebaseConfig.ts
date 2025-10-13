@@ -7,3 +7,7 @@ import storage from '@react-native-firebase/storage';
 export const authService = auth();
 export const db = firestore();
 export const storageService = storage();
+
+
+export { storage };
+// # Client SDK init

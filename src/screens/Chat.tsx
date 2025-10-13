@@ -7,12 +7,14 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Modal,TouchableWithoutFeedback,
+  Alert,
 } from "react-native";
 import firestore from "@react-native-firebase/firestore";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import Navbar from "../components/Navbar";
 import SearchBox from "../components/SearchBox";
 import { theme } from "../core/theme";
+import auth from "@react-native-firebase/auth";
 
 interface ChatItem {
   id: string;
@@ -24,6 +26,7 @@ interface ChatItem {
 interface UserItem {
   id: string;
   name: string;
+  email: string;
 }
 
 const Chat = ({ navigation }: { navigation: any }) => {
@@ -34,38 +37,194 @@ const Chat = ({ navigation }: { navigation: any }) => {
   const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
-    // Fetch chats in real-time
-    const unsubscribe = firestore()
-      .collection("chats")
-      .orderBy("updatedAt", "desc")
+    const currentUser = auth().currentUser;
+    if (!currentUser) {
+      setLoading(false);
+      return;
+    }
+  
+    const currentUid = currentUser.uid;
+    setLoading(true);
+  
+    // ✅ Users listener
+    const unsubscribeUsers = firestore()
+      .collection("users")
       .onSnapshot((snapshot) => {
-        const chatData: ChatItem[] = snapshot.docs.map((doc) => {
-          const data = doc.data();
+        const userList = snapshot.docs
+          .map((doc) => {
+            const data = doc.data();
+            return data.uid !== currentUid
+              ? {
+                  id: data.uid,
+                  name: data.name || "Unnamed",
+                  lastMessage: data.lastMessage || "",
+                  updatedAt: data.lastMessageTime
+                    ? data.lastMessageTime.toDate().toLocaleTimeString()
+                    : "",
+                  isGroup: false,
+                }
+              : null;
+          })
+          .filter(Boolean);
+        setChats((prev) => mergeChats(prev, userList)); // ✅ merge users
+      });
+  
+    // ✅ Groups listener
+    const unsubscribeGroups = firestore()
+      .collection("groups")
+      .where("members", "array-contains", currentUid)
+      .onSnapshot((snapshot) => {
+        const groupData = snapshot.docs.map((doc) => {
+          const data = doc.data() || {};
           return {
             id: doc.id,
-            name: data.name || "Unknown",
+            name: data.name || "Unnamed Group",
             lastMessage: data.lastMessage || "",
-            updatedAt: data.updatedAt?.toDate().toLocaleTimeString() || "",
+            updatedAt: data.lastMessageTime
+              ? data.lastMessageTime.toDate().toLocaleTimeString()
+              : data.createdAt
+              ? data.createdAt.toDate().toLocaleTimeString()
+              : "",
+            isGroup: true,
           };
         });
-        setChats(chatData);
+        setChats((prev) => mergeChats(prev, groupData)); // ✅ merge groups
+      });
+  
+    // ✅ Chats listener (DMs)
+    const unsubscribeChats = firestore()
+      .collection("chats")
+      .where("participants", "array-contains", currentUid)
+      .orderBy("updatedAt", "desc")
+      .onSnapshot(async (snapshot) => {
+        if (!snapshot) return;
+  
+        const chatData = await Promise.all(
+          snapshot.docs.map(async (doc) => {
+            const data = doc.data() || {};
+            const participants = Array.isArray(data.participants)
+              ? data.participants
+              : [];
+            const otherUserId = participants.find((uid) => uid !== currentUid);
+            let chatName = "Unknown";
+  
+            if (otherUserId) {
+              try {
+                const userDoc = await firestore()
+                  .collection("users")
+                  .doc(otherUserId)
+                  .get();
+                const userInfo = userDoc.data();
+                chatName =
+                  userInfo?.displayName ||
+                  userInfo?.name ||
+                  userInfo?.email ||
+                  "Unknown";
+              } catch (err) {
+                chatName = "Error Loading";
+              }
+            } else {
+              chatName = "Me";
+            }
+  
+            return {
+              id: doc.id,
+              name: chatName,
+              lastMessage: data.lastMessage || "",
+              updatedAt: data.updatedAt
+                ? data.updatedAt.toDate().toLocaleTimeString()
+                : "",
+              isGroup: false,
+            };
+          })
+        );
+  
+        setChats((prev) => mergeChats(prev, chatData)); // ✅ merge DMs safely
         setLoading(false);
       });
+  
+    // ✅ Cleanup (no memory leaks!)
+    return () => {
+      unsubscribeChats();
+      unsubscribeGroups();
+      unsubscribeUsers();
+    };
+  }, []); // ⚠️ Fix: remove [currentUid] dependency
+  
+  
+  // ✅ Merges chats (groups + DMs) and keeps only one entry per id, sorted by latest time
+  function mergeChats(prevChats, newChats) {
+    const map = new Map();
+  
+    [...prevChats, ...newChats].forEach((chat) => {
+      map.set(chat.id, chat);
+    });
+  
+    const merged = Array.from(map.values());
+  
+    return merged.sort((a, b) => {
+      const aTime = new Date(a.updatedAt).getTime() || 0;
+      const bTime = new Date(b.updatedAt).getTime() || 0;
+      return bTime - aTime; // newest on top
+    });
+  }
 
-    // Fetch all registered users once
-    firestore()
-      .collection("users")
-      .get()
-      .then((snapshot) => {
-        const userData: UserItem[] = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          name: doc.data().name || "Unknown",
-        }));
-        setUsers(userData);
+  // ✅ Fixed: Proper chat creation function
+  const startChatWithUser = async (user: UserItem) => {
+    const currentUser = auth().currentUser;
+    if (!currentUser) {
+      Alert.alert("Error", "Please log in again");
+      return;
+    }
+    
+    setShowUsersModal(false);
+    
+    try {
+      // Check if chat already exists between these two users
+      const existingChatQuery = await firestore()
+        .collection("chats")
+        .where("participants", "array-contains", currentUser.uid)
+        .get();
+
+      let existingChatId = null;
+      
+      // Look for a chat that has exactly these two participants
+      existingChatQuery.docs.forEach(doc => {
+        const data = doc.data();
+        const participants = data.participants || [];
+        if (participants.includes(user.id) && participants.length === 2) {
+          existingChatId = doc.id;
+        }
       });
 
-    return () => unsubscribe();
-  }, []);
+      if (existingChatId) {
+        // Chat exists, navigate to it
+        console.log("Existing chat found:", existingChatId);
+        navigation.navigate("ChatDetailScreen", {
+          chatId: existingChatId,
+          name: user.name,
+        });
+      } else {
+        // Create new chat
+        console.log("Creating new chat with:", user.id, user.name);
+        const newChatRef = await firestore().collection("chats").add({
+          participants: [currentUser.uid, user.id],
+          lastMessage: "",
+          updatedAt: firestore.FieldValue.serverTimestamp(),
+          createdAt: firestore.FieldValue.serverTimestamp(),
+        });
+
+        console.log("New chat created:", newChatRef.id);
+        navigation.navigate("ChatDetailScreen", {
+          chatId: newChatRef.id,
+          name: user.name,
+        });
+      }
+    } catch (error) {
+      console.error("Error starting chat:", error);
+      Alert.alert("Error", "Failed to start chat: " + error.message);
+    }
+  };
 
   const renderChatItem = ({ item }: { item: ChatItem }) => (
     <TouchableOpacity
@@ -97,12 +256,19 @@ const Chat = ({ navigation }: { navigation: any }) => {
   const renderUserItem = ({ item }: { item: UserItem }) => (
     <TouchableOpacity
       style={styles.userRow}
-      onPress={() => {
-        setShowUsersModal(false);
-        navigation.navigate("ChatDetailScreen", { chatId: item.id, name: item.name });
-      }}
+      onPress={() => startChatWithUser(item)}
     >
-      <Text style={styles.userName}>{item.name}</Text>
+      
+      <View style={styles.avatar}>
+        <Text style={styles.avatarText}>
+          {item.name?.charAt(0).toUpperCase() || "U"}
+        </Text>
+      </View>
+  
+      <View style={styles.chatContent}>
+        <Text style={styles.chatName}>{item.name}</Text>
+        <Text style={styles.chatMessage}>Tap to chat</Text>
+      </View>
     </TouchableOpacity>
   );
 
@@ -110,6 +276,7 @@ const Chat = ({ navigation }: { navigation: any }) => {
     return (
       <View style={styles.loader}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.loadingText}>Loading chats...</Text>
       </View>
     );
   }
@@ -128,29 +295,35 @@ const Chat = ({ navigation }: { navigation: any }) => {
       </View>
 
       {/* Menu popover with outside click handling */}
-{showMenu && (
-  <TouchableWithoutFeedback onPress={() => setShowMenu(false)}>
-    <View style={styles.menuOverlay}>
-      <TouchableWithoutFeedback>
-        <View style={styles.menuPopover}>
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => console.log("Create Group")}
-          >
-            <Text>Create Group</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.menuItem}
-            onPress={() => console.log("Create Community")}
-          >
-            <Text>Create Community</Text>
-          </TouchableOpacity>
-        </View>
-      </TouchableWithoutFeedback>
-    </View>
-  </TouchableWithoutFeedback>
-)}
+      {showMenu && (
+        <TouchableWithoutFeedback onPress={() => setShowMenu(false)}>
+          <View style={styles.menuOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.menuPopover}>
+              <TouchableOpacity
+  style={styles.menuItem}
+  onPress={() => {
+    setShowMenu(false); // hide the menu
+    navigation.navigate("SelectMembersScreen", {
+      groupName: "",  // optionally pre-fill or leave empty for now
+      groupPic: null, // optionally pre-fill or leave null
+    });
+  }}
+>
+  <Text>Create Group</Text>
+</TouchableOpacity>
 
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => console.log("Create Community")}
+                >
+                  <Text>Create Community</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      )}
 
       <SearchBox />
 
@@ -159,6 +332,12 @@ const Chat = ({ navigation }: { navigation: any }) => {
         keyExtractor={(item) => item.id}
         renderItem={renderChatItem}
         contentContainerStyle={{ paddingBottom: 80 }}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No chats yet</Text>
+            <Text style={styles.emptySubtext}>Tap the + button to start a conversation</Text>
+          </View>
+        }
       />
 
       {/* Floating + Button */}
@@ -166,7 +345,7 @@ const Chat = ({ navigation }: { navigation: any }) => {
         style={styles.fab}
         onPress={() => setShowUsersModal(true)}
       >
-        <Icon  name="plus" size={28} color="#fff" />
+        <Icon name="plus" size={28} color="#fff" />
       </TouchableOpacity>
 
       {/* Users Modal */}
@@ -178,14 +357,21 @@ const Chat = ({ navigation }: { navigation: any }) => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>All Users</Text>
+            <Text style={styles.modalTitle}>Start New Chat</Text>
             <FlatList
               data={users}
               keyExtractor={(item) => item.id}
               renderItem={renderUserItem}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <Text style={styles.emptyText}>No other users found</Text>
+              }
             />
-            <TouchableOpacity onPress={() => setShowUsersModal(false)} style={styles.modalClose}>
-              <Text style={{ color: "#25D366" }}>Close</Text>
+            <TouchableOpacity 
+              onPress={() => setShowUsersModal(false)} 
+              style={styles.modalCloseButton}
+            >
+              <Text style={styles.modalCloseText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -197,16 +383,101 @@ const Chat = ({ navigation }: { navigation: any }) => {
 };
 
 const styles = StyleSheet.create({
-
-  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
-  sectionTitle: { fontSize: 24, fontWeight: "600", marginLeft: 20, marginTop: 40, marginBottom: 15, color: "#25d366" },
-  chatRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 15, paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: "#ddd" },
-  avatar: { width: 45, height: 45, borderRadius: 25, backgroundColor: "#ccc", alignItems: "center", justifyContent: "center" },
-  avatarText: { fontWeight: "bold", color: "#fff" },
-  chatContent: { flex: 1, marginLeft: 12 },
-  chatName: { fontSize: 16, fontWeight: "500" },
-  chatMessage: { fontSize: 14, color: "#555" },
-  chatTime: { fontSize: 12, color: "#999" },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "90%",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    maxHeight: "75%",
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: "600",
+    color: "#25D366",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  userRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#eee",
+  },
+  modalCloseButton: {
+    marginTop: 15,
+    padding: 12,
+    alignItems: "center",
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+  },
+  modalCloseText: {
+    color: "#25D366",
+    fontWeight: "600",
+  },
+  avatar: {
+    width: 45,
+    height: 45,
+    borderRadius: 25,
+    backgroundColor: "#25D366",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    fontWeight: "bold",
+    color: "#fff",
+    fontSize: 18,
+  },
+  chatContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  chatName: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#000",
+  },
+  chatMessage: {
+    fontSize: 14,
+    color: "#555",
+  },
+  loader: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center" 
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#666",
+  },
+  sectionTitle: { 
+    fontSize: 24, 
+    fontWeight: "600", 
+    marginLeft: 20, 
+    marginTop: 40, 
+    marginBottom: 15, 
+    color: "#25d366" 
+  },
+  chatRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingHorizontal: 15, 
+    paddingVertical: 12, 
+    borderBottomWidth: 0.5, 
+    borderBottomColor: "#ddd" 
+  },
+  chatTime: { 
+    fontSize: 12, 
+    color: "#999" 
+  },
   fab: {
     position: "absolute",
     bottom: 88,
@@ -230,7 +501,7 @@ const styles = StyleSheet.create({
   },
   menuPopover: {
     position: "absolute",
-    top: 50, // Adjust to appear over SearchBox
+    top: 50,
     right: 15,
     backgroundColor: "#fff",
     borderRadius: 8,
@@ -243,13 +514,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
   },
-  menuItem: { padding: 12 },
-  modalContent: { width: "80%", backgroundColor: "#fff", borderRadius: 10, padding: 20, maxHeight: "70%" },
-  modalTitle: { fontSize: 18, fontWeight: "600", marginBottom: 10 },
-  userRow: { paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: "#ccc" },
-  userName: { fontSize: 16 },
-  modalClose: { marginTop: 10, alignItems: "center" },
-  
+  menuItem: { 
+    padding: 12 
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#999",
+    textAlign: "center",
+    marginTop: 8,
+  },
 });
 
 export default Chat;

@@ -15,6 +15,9 @@ import SplashScreen from './src/screens/Splash';
 import SubscriptionScreen from './src/screens/Subscription';
 import ChatDetail from './src/screens/ChatDetail';
 import ProfileScreen from './src/screens/Profile';
+import SelectMembersScreen from './src/screens/SelectMembersScreen';
+import GroupCreationScreen from './src/screens/GroupCreationScreen';
+import GroupInfoScreen from './src/screens/GroupInfoScreen';
 import '@utils/firebaseConfig';
 const Stack = createNativeStackNavigator();
 
@@ -62,6 +65,7 @@ const App = () => {
               name="ChatScreen"
               component={ChatScreen}
               options={{ headerShown: false }}
+              
             />
             <Stack.Screen
               name="ChatDetailScreen"
@@ -76,6 +80,21 @@ const App = () => {
             <Stack.Screen
               name="ProfileScreen"
               component={ProfileScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="SelectMembersScreen"
+              component={SelectMembersScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="GroupCreationScreen"
+              component={GroupCreationScreen}
+              options={{ headerShown: false }}  
+            />
+            <Stack.Screen
+              name="GroupInfoScreen"
+              component={GroupInfoScreen}
               options={{ headerShown: false }}
             />
           </Stack.Navigator>

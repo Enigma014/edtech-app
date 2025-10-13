@@ -1,30 +1,56 @@
 // src/screens/Settings.tsx
-import React from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, ActivityIndicator } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import Navbar from "../components/Navbar";
-import auth from '@react-native-firebase/auth';
+import auth from "@react-native-firebase/auth";
+import firestore from "@react-native-firebase/firestore";
 
 const Settings = ({ navigation }: { navigation: any }) => {
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<{ name: string; bio: string; profilePic: string } | null>(null);
+
+  const userId = auth().currentUser?.uid;
+
+  // 🔥 Fetch user data from Firestore
+  useEffect(() => {
+    if (!userId) return;
+
+    const unsubscribe = firestore()
+      .collection("users")
+      .doc(userId)
+      .onSnapshot((doc) => {
+        if (doc.exists) {
+          setProfile(doc.data() as any);
+        }
+        setLoading(false);
+      });
+
+    return () => unsubscribe();
+  }, [userId]);
 
   const handleOptionPress = (item: any) => {
     if (item.title === "Edit profile") {
       navigation.navigate("ProfileScreen", {
-        name: "Jack",
-        bio: "⚽️",
-        profilePic: "https://i.pravatar.cc/150?img=3",
+        name: profile?.name || "",
+        bio: profile?.bio || "",
+        profilePic: profile?.profilePic || "",
       });
     } else if (item.title === "Logout") {
-      Alert.alert(
-        "Logout",
-        "Are you sure you want to logout?",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Logout", style: "destructive", onPress: () => auth().signOut() },
-        ]
-      );
+      Alert.alert("Logout", "Are you sure you want to logout?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Logout", style: "destructive", onPress: () => auth().signOut() },
+      ]);
     }
   };
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#25D366" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -36,23 +62,19 @@ const Settings = ({ navigation }: { navigation: any }) => {
         {/* Profile Section */}
         <View style={styles.profileSection}>
           <Image
-            source={{ uri: "https://i.pravatar.cc/150?img=3" }}
+            source={{ uri: profile?.profilePic || "https://i.pravatar.cc/150?img=3" }}
             style={styles.avatar}
           />
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.profileName}>Jack</Text>
-            <Text style={styles.profileStatus}>⚽️</Text>
+            <Text style={styles.profileName}>{profile?.name || "Unknown"}</Text>
+            <Text style={styles.profileStatus}>{profile?.bio || ""}</Text>
           </View>
         </View>
 
         {/* Settings Options */}
         <View style={styles.optionList}>
           {settingsOptions.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.optionItem}
-              onPress={() => handleOptionPress(item)}
-            >
+            <TouchableOpacity key={index} style={styles.optionItem} onPress={() => handleOptionPress(item)}>
               <Ionicons name={item.icon} size={22} color="#4a4a4a" />
               <View style={{ marginLeft: 15, flex: 1 }}>
                 <Text style={styles.optionTitle}>{item.title}</Text>
