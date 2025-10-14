@@ -31,7 +31,7 @@ interface UserItem {
 
 const Chat = ({ navigation }: { navigation: any }) => {
   const [chats, setChats] = useState<ChatItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -44,7 +44,6 @@ const Chat = ({ navigation }: { navigation: any }) => {
     }
   
     const currentUid = currentUser.uid;
-    setLoading(true);
   
     // ✅ Users listener
     const unsubscribeUsers = firestore()
@@ -140,7 +139,6 @@ const Chat = ({ navigation }: { navigation: any }) => {
         );
   
         setChats((prev) => mergeChats(prev, chatData)); // ✅ merge DMs safely
-        setLoading(false);
       });
   
     // ✅ Cleanup (no memory leaks!)
@@ -199,14 +197,12 @@ const Chat = ({ navigation }: { navigation: any }) => {
 
       if (existingChatId) {
         // Chat exists, navigate to it
-        console.log("Existing chat found:", existingChatId);
         navigation.navigate("ChatDetailScreen", {
           chatId: existingChatId,
           name: user.name,
         });
       } else {
         // Create new chat
-        console.log("Creating new chat with:", user.id, user.name);
         const newChatRef = await firestore().collection("chats").add({
           participants: [currentUser.uid, user.id],
           lastMessage: "",
@@ -214,7 +210,6 @@ const Chat = ({ navigation }: { navigation: any }) => {
           createdAt: firestore.FieldValue.serverTimestamp(),
         });
 
-        console.log("New chat created:", newChatRef.id);
         navigation.navigate("ChatDetailScreen", {
           chatId: newChatRef.id,
           name: user.name,

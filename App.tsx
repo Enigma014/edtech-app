@@ -7,9 +7,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import LoginScreen from './src/auth/Login';
 import RegisterScreen from './src/auth/Register';
+import ForgotPasswordScreen from './src/auth/models/ForgotPasswordScreen';
+
 import SettingsScreen from './src/screens/Settings';
 import CommunityScreen from './src/screens/Community';
-import ChatScreen from './src/screens/Chat';
+import Chat from './src/screens/Chat';
 import ProductScreen from './src/screens/Product';
 import SplashScreen from './src/screens/Splash';
 import SubscriptionScreen from './src/screens/Subscription';
@@ -51,7 +53,13 @@ const App = () => {
               component={LoginScreen}
               options={{ headerShown: false }}
             />
-      <Stack.Screen
+            <Stack.Screen
+              name="ForgotPasswordScreen"
+              component={ForgotPasswordScreen}
+              options={{ headerShown: false }}
+            />
+
+            <Stack.Screen
               name="SettingsScreen"
               component={SettingsScreen}
               options={{ headerShown: false }}
@@ -63,7 +71,7 @@ const App = () => {
             />
             <Stack.Screen
               name="ChatScreen"
-              component={ChatScreen}
+              component={Chat}
               options={{ headerShown: false }}
               
             />
