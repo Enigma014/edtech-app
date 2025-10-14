@@ -30,7 +30,7 @@ interface UserItem {
   email: string;
 }
 
-const Chat = ({ navigation }: { navigation: any }) => {
+const ChatScreen = ({ navigation }: { navigation: any }) => {
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<UserItem[]>([]);
@@ -539,4 +539,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Chat;
+export default ChatScreen;
