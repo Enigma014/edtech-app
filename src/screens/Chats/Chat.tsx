@@ -11,9 +11,9 @@ import {
 } from "react-native";
 import firestore from "@react-native-firebase/firestore";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import Navbar from "../components/Navbar";
-import SearchBox from "../components/SearchBox";
-import { theme } from "../core/theme";
+import Navbar from "../../components/Navbar";
+import SearchBox from "../../components/SearchBox";
+import { theme } from "../../core/theme";
 import auth from "@react-native-firebase/auth";
 
 interface ChatItem {
@@ -21,6 +21,7 @@ interface ChatItem {
   name: string;
   lastMessage: string;
   updatedAt: string;
+  isGroup?: boolean;
 }
 
 interface UserItem {
@@ -200,6 +201,8 @@ const Chat = ({ navigation }: { navigation: any }) => {
         navigation.navigate("ChatDetailScreen", {
           chatId: existingChatId,
           name: user.name,
+          contactId: user.id,     // ✅ ADD THIS
+          isGroup: false,         // ✅ ADD THIS
         });
       } else {
         // Create new chat
@@ -213,6 +216,8 @@ const Chat = ({ navigation }: { navigation: any }) => {
         navigation.navigate("ChatDetailScreen", {
           chatId: newChatRef.id,
           name: user.name,
+          contactId: user.id,     // ✅ ADD THIS
+          isGroup: false,         // ✅ ADD THIS
         });
       }
     } catch (error) {
@@ -227,6 +232,9 @@ const Chat = ({ navigation }: { navigation: any }) => {
         navigation.navigate("ChatDetailScreen", {
           chatId: item.id,
           name: item.name,
+          isGroup: item.isGroup || false,  // ✅ ADD THIS - use the isGroup property from your data
+        contactId: item.isGroup ? undefined : item.id, // ✅ ADD THIS - for individual chats
+          
         })
       }
       style={styles.chatRow}
@@ -302,6 +310,7 @@ const Chat = ({ navigation }: { navigation: any }) => {
     navigation.navigate("SelectMembersScreen", {
       groupName: "",  // optionally pre-fill or leave empty for now
       groupPic: null, // optionally pre-fill or leave null
+
     });
   }}
 >

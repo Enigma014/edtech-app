@@ -76,18 +76,27 @@ const ChatDetailScreen = ({ route, navigation }) => {
             </TouchableOpacity>
             <TouchableOpacity
   onPress={() => {
-    if (route.params.isGroup) {
+    const { isGroup, contactId } = route.params || {};
+    console.log("Pressed chat name → Params:", route.params);
+
+    if (isGroup) {
       navigation.navigate("GroupInfoScreen", { groupId: chatId });
+    } else if (contactId) {
+      navigation.navigate("ContactProfileScreen", { contactId });
+    } else {
+      console.warn("No valid navigation target found.");
     }
   }}
 >
   <Text style={styles.contactName}>{name}</Text>
 </TouchableOpacity>
 
+
+
           </View>
 
           <View style={styles.headerIcons}>
-            <Icon name="phone-outline" size={22} color="#000" style={styles.headerIcon} />
+            {/* <Icon name="phone-outline" size={22} color="#000" style={styles.headerIcon} /> */}
             <Icon name="dots-vertical" size={22} color="#000" />
           </View>
         </View>

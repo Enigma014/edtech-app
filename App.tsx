@@ -7,19 +7,22 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import LoginScreen from './src/auth/Login';
 import RegisterScreen from './src/auth/Register';
-import ForgotPasswordScreen from './src/auth/models/ForgotPasswordScreen';
-
-import SettingsScreen from './src/screens/Settings';
-import CommunityScreen from './src/screens/Community';
-import Chat from './src/screens/Chat';
+import SettingsScreen from './src/screens/Settings/Settings';
+import CommunityScreen from './src/screens/Community/Community';
+import CreateCommunityScreen from './src/screens/Community/CreateCommunityScreen';
+import CommunityOverviewScreen from './src/screens/Community/CommunityOverviewScreen';
+import ManageGroupsScreen from './src/screens/Community/ManageGroupScreen';
+import ChatScreen from './src/screens/Chats/Chat';
 import ProductScreen from './src/screens/Product';
 import SplashScreen from './src/screens/Splash';
 import SubscriptionScreen from './src/screens/Subscription';
-import ChatDetail from './src/screens/ChatDetail';
-import ProfileScreen from './src/screens/Profile';
-import SelectMembersScreen from './src/screens/SelectMembersScreen';
-import GroupCreationScreen from './src/screens/GroupCreationScreen';
-import GroupInfoScreen from './src/screens/GroupInfoScreen';
+import ChatDetail from './src/screens/Chats/ChatDetail';
+import ProfileScreen from './src/screens/Settings/Profile';
+import SelectMembersScreen from './src/screens/Groups/SelectMembersScreen';
+import GroupCreationScreen from './src/screens/Groups/GroupCreationScreen';
+import GroupInfoScreen from './src/screens/Groups/GroupInfoScreen';
+import ContactProfileScreen from './src/screens/Chats/ContactProfileScreen';
+import SelectGroupsScreen from './src/screens/Community/SelectGroupsScreen';
 import '@utils/firebaseConfig';
 const Stack = createNativeStackNavigator();
 
@@ -103,6 +106,31 @@ const App = () => {
             <Stack.Screen
               name="GroupInfoScreen"
               component={GroupInfoScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ContactProfileScreen"
+              component={ContactProfileScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="CreateCommunityScreen"
+              component={CreateCommunityScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="CommunityOverviewScreen"
+              component={CommunityOverviewScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="ManageGroupsScreen"
+              component={ManageGroupsScreen}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="SelectGroupsScreen"
+              component={SelectGroupsScreen}
               options={{ headerShown: false }}
             />
           </Stack.Navigator>

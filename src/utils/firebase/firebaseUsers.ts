@@ -13,6 +13,7 @@ export const createUserInFirestore = async (
       name,
       email,
       isAdmin,         // 👈 Added field
+      
       createdAt: firestore.FieldValue.serverTimestamp(),
     });
   } catch (error) {
