@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, ActivityIndicator } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
-import Navbar from "../components/Navbar";
+import Navbar from "../../components/Navbar";
 import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
 

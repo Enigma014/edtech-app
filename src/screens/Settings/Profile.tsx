@@ -1,4 +1,4 @@
-// src/screens/ProfileScreen.tsx
+// src/screens/Settings/ProfileScreen.tsx
 import React, { useState, useRef } from "react";
 import {
   View,
@@ -15,7 +15,7 @@ import firestore from "@react-native-firebase/firestore";
 import storage from "@react-native-firebase/storage";
 import auth from "@react-native-firebase/auth";
 
-const defaultPic = Image.resolveAssetSource(require("../assets/Profile.jpeg")).uri;
+const defaultPic = Image.resolveAssetSource(require("../../assets/Profile.jpeg")).uri;
 
 const ProfileScreen = ({ route, navigation }) => {
   const { name: initialName, bio: initialBio, profilePic: initialProfilePic } =

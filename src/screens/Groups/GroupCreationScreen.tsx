@@ -8,9 +8,9 @@ import {
   Image,
   Alert 
 } from "react-native";
-import firestore from "@react-native-firebase/firestore";
-import auth from "@react-native-firebase/auth";
+import { authService } from "../../utils/firebaseConfig";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import firestore from "@react-native-firebase/firestore";
 
 interface User {
   id: string;
@@ -24,8 +24,7 @@ export default function GroupCreationScreen() {
   const navigation = useNavigation();
   const route = useRoute<any>();
   
-  // ✅ safe defaults
-  const { selectedMembers = [], selectedUsersData = [] } = route.params || {};
+  const { selectedMembers = [], selectedUsersData = [], communityId } = route.params || {};
   
   const handleCreateGroup = async () => {
     if (!groupName.trim()) {
@@ -36,40 +35,100 @@ export default function GroupCreationScreen() {
       return Alert.alert("Error", "Select at least one member");
     }
 
-    const currentUser = auth().currentUser;
+    const currentUser = authService.currentUser;
     if (!currentUser) return Alert.alert("Error", "Please login again");
 
     setLoading(true);
 
     try {
-      const groupRef = firestore().collection("groups").doc();
+      // 🚨 For community groups
+      if (communityId) {
+        console.log("🏢 Creating community group for community:", communityId);
+        
+        // Create group in community's groups subcollection
+        const communityGroupRef = await firestore()
+          .collection('communities')
+          .doc(communityId)
+          .collection('groups')
+          .add({
+            // Basic group info
+            name: groupName.trim(),
+            description: `Group for ${groupName}`,
+            isAnnouncement: false,
+            
+            // Member info
+            members: [currentUser.uid, ...selectedMembers.map((m: any) => m.id || m)],
+            createdBy: currentUser.uid,
+            admin: currentUser.uid,
+            
+            // Timestamps
+            createdAt: firestore.FieldValue.serverTimestamp(),
+            lastMessage: "Group created",
+            lastMessageTime: firestore.FieldValue.serverTimestamp(),
+            
+            // Media
+            groupPic: groupPic || null,
+            
+            // Community identification
+            isCommunityGroup: true,
+            communityId: communityId,
+            
+            // 🚨 CRITICAL: Add groupId field for navigation
+            groupId: `community_${communityId}_${Date.now()}`,
+            
+            // For display
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          });
 
-      // Make sure members array contains only UIDs
-      const members = [currentUser.uid, ...selectedMembers.map((m: any) => m.id || m)];
+        console.log("✅ [DEBUG CREATION] Group created successfully!");
+        console.log("📝 [DEBUG CREATION] Group details:", {
+          name: groupName.trim(),
+          communityId: communityId,
+          documentId: communityGroupRef.id,
+          path: `communities/${communityId}/groups/${communityGroupRef.id}`
+        });
+        
+        Alert.alert("Success", "Group added to community successfully!");
+        
+        // 🚨 Navigate back to Community screen (main Community.tsx)
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Community' }], // This should be your main Community.tsx screen
+        });
+        
+      } else {
+        // 🚨 Regular group creation (non-community)
+        console.log("💬 Creating regular group (non-community)");
+        
+        const groupRef = firestore().collection("groups").doc();
+        
+        const members = [currentUser.uid, ...selectedMembers.map((m: any) => m.id || m)];
 
-      await groupRef.set({
-        id: groupRef.id,
-        name: groupName,
-        groupPic: groupPic || null,
-        members,                     // includes current user + selected members
-        createdBy: currentUser.uid,
-        admin: currentUser.uid,      // ✅ assign current user as admin
-        createdAt: firestore.FieldValue.serverTimestamp(),
-        lastMessage: "Group created",
-        lastMessageTime: firestore.FieldValue.serverTimestamp(),
-        isGroup: true,
-      });
-      
+        const groupData = {
+          id: groupRef.id,
+          name: groupName,
+          groupPic: groupPic || null,
+          members,
+          createdBy: currentUser.uid,
+          admin: currentUser.uid,
+          createdAt: firestore.FieldValue.serverTimestamp(),
+          lastMessage: "Group created",
+          lastMessageTime: firestore.FieldValue.serverTimestamp(),
+          isGroup: true,
+        };
 
-      // Navigate to ChatScreen with group info
-      navigation.navigate("ChatScreen", {
-        groupId: groupRef.id,
-        isGroup: true,
-        groupName: groupName,
-      });
+        await groupRef.set(groupData);
+
+        // Navigate to ChatScreen for regular groups only
+        navigation.navigate("ChatScreen", {
+          groupId: groupRef.id,
+          isGroup: true,
+          groupName: groupName,
+        });
+      }
       
     } catch (error) {
-      console.error("Failed to create group:", error);
+      console.error("❌ Failed to create group:", error);
       Alert.alert("Error", "Failed to create group");
     } finally {
       setLoading(false);
@@ -78,7 +137,9 @@ export default function GroupCreationScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>New Group</Text>
+      <Text style={styles.title}>
+        {communityId ? "New Community Group" : "New Group"}
+      </Text>
 
       {/* Group Image */}
       <TouchableOpacity 
@@ -112,6 +173,11 @@ export default function GroupCreationScreen() {
           {selectedUsersData.map((user: User) => user.name).join(", ")}
           {selectedUsersData.length > 0 ? " and you" : "You"}
         </Text>
+        {communityId && (
+          <Text style={styles.communityNote}>
+            🏢 This group will be created in your community and will appear in the Community section
+          </Text>
+        )}
       </View>
 
       {/* Create Button */}
@@ -124,7 +190,7 @@ export default function GroupCreationScreen() {
         disabled={!groupName.trim() || loading}
       >
         <Text style={styles.createButtonText}>
-          {loading ? "Creating..." : "Create Group"}
+          {loading ? "Creating..." : communityId ? "Create Community Group" : "Create Group"}
         </Text>
       </TouchableOpacity>
     </View>
@@ -194,6 +260,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666666",
     lineHeight: 20,
+  },
+  communityNote: {
+    fontSize: 12,
+    color: "#25D366",
+    fontStyle: "italic",
+    marginTop: 8,
+    fontWeight: "500",
   },
   createButton: {
     backgroundColor: "#25D366",

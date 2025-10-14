@@ -45,16 +45,16 @@ const LoginScreen = ({ navigation }: Props) => {
       console.log('Firebase login success:', user.uid);
 
       // ✅ Update Firestore user profile (optional but good practice)
-      await db.collection('users').doc(user.uid).set(
-        {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || email.value.split('@')[0],
-          photoURL: user.photoURL || '',
-          lastLogin: new Date(),
-        },
-        { merge: true }
-      );
+      // await db.collection('users').doc(user.uid).set(
+      //   {
+      //     uid: user.uid,
+      //     email: user.email,
+      //     displayName: user.displayName || email.value.split('@')[0],
+      //     photoURL: user.photoURL || '',
+      //     lastLogin: new Date(),
+      //   },
+      //   { merge: true }
+      // );
 
       console.log('Firestore user updated');
       setLoading(false);
