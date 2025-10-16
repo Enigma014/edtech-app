@@ -4,18 +4,22 @@ import {
   Text, 
   FlatList, 
   TouchableOpacity, 
-  StyleSheet 
+  StyleSheet,
+  Alert 
 } from "react-native";
 import firestore from "@react-native-firebase/firestore";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import auth from "@react-native-firebase/auth";
 
-// Define the navigation param list type
 type RootStackParamList = {
-  GroupCreationScreen: { selectedMembers: string[]; selectedUsersData: any[] };
+  GroupCreationScreen: { 
+    selectedMembers: string[]; 
+    selectedUsersData: any[];
+    communityId?: string;
+  };
 };
 
-// Define the navigation prop type
 type SelectMembersScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
   'GroupCreationScreen'
@@ -23,40 +27,123 @@ type SelectMembersScreenNavigationProp = NativeStackNavigationProp<
 
 export default function SelectMembersScreen() {
   const navigation = useNavigation<SelectMembersScreenNavigationProp>();
+  const route = useRoute();
+  
+  const currentUser = auth().currentUser;
+  const currentUserId = currentUser?.uid;
+  const { communityId } = route.params || {};
+  
   const [users, setUsers] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false); // 🆕 ADMIN CHECK
+  const [loading, setLoading] = useState(true); // 🆕 LOADING STATE
 
   useEffect(() => {
-    const unsub = firestore().collection("users").onSnapshot(snapshot => {
-      setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return unsub;
-  }, []);
+    if (!currentUserId) return;
+
+    // 🆕 CHECK IF USER IS ADMIN OF THE COMMUNITY
+    const checkAdminStatus = async () => {
+      try {
+        if (communityId) {
+          const communityDoc = await firestore()
+            .collection("communities")
+            .doc(communityId)
+            .get();
+          
+          const communityData = communityDoc.data();
+          if (communityData && communityData.admin === currentUserId) {
+            setIsAdmin(true);
+          } else {
+            setIsAdmin(false);
+            Alert.alert("Access Denied", "Only community admin can add members");
+            navigation.goBack();
+            return;
+          }
+        } else {
+          // For regular groups, user is always admin (they're creating it)
+          setIsAdmin(true);
+        }
+      } catch (error) {
+        console.error("Error checking admin status:", error);
+        Alert.alert("Error", "Failed to verify permissions");
+        navigation.goBack();
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAdminStatus();
+
+    // Only fetch users if user is admin
+    if (isAdmin) {
+      const unsub = firestore().collection("users").onSnapshot(snapshot => {
+        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const filteredUsers = allUsers.filter(user => 
+          user.id !== currentUserId && user.uid !== currentUserId
+        );
+        setUsers(filteredUsers);
+      });
+      return unsub;
+    }
+  }, [currentUserId, communityId, isAdmin]);
 
   const toggleSelect = (uid: string) => {
+    if (!isAdmin) return; // 🆕 PREVENT SELECTION IF NOT ADMIN
     setSelected(prev =>
       prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
     );
   };
 
   const handleCreateGroup = () => {
+    if (!isAdmin) { // 🆕 ADMIN CHECK
+      Alert.alert("Access Denied", "Only admin can create groups");
+      return;
+    }
+
     const selectedUsersData = users.filter(user => selected.includes(user.id));
   
     if (selected.length === 0) {
-      return alert("Select at least one member");
+      return Alert.alert("Error", "Select at least one member");
     }
   
     navigation.navigate("GroupCreationScreen", { 
       selectedMembers: selected,
-      selectedUsersData: selectedUsersData
+      selectedUsersData: selectedUsersData,
+      communityId: communityId
     });
   };
-  
 
-  // ... rest of your component remains the same
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text>Checking permissions...</Text>
+      </View>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text>Access Denied</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Select Members</Text>
+      <Text style={styles.title}>
+        {communityId ? "Select Community Members" : "Select Members"}
+      </Text>
+      
+      {communityId && (
+        <Text style={styles.communityNote}>
+          🏢 Creating group for community (Admin Only)
+        </Text>
+      )}
+      
+      {/* 🆕 SHOW ADMIN BADGE */}
+      
+      
       <Text style={styles.subtitle}>
         {selected.length} member{selected.length !== 1 ? 's' : ''} selected
       </Text>
@@ -78,14 +165,14 @@ export default function SelectMembersScreen() {
             ]}>
               {item.name}
             </Text>
-            {item.email && (
+            {/* {item.email && (
               <Text style={[
                 styles.userEmail,
                 selected.includes(item.id) && styles.selectedText
               ]}>
                 {item.email}
               </Text>
-            )}
+            )} */}
           </TouchableOpacity>
         )}
         style={styles.list}
@@ -94,10 +181,10 @@ export default function SelectMembersScreen() {
       <TouchableOpacity 
         style={[
           styles.nextButton,
-          selected.length === 0 && styles.nextButtonDisabled
+          (selected.length === 0 || !isAdmin) && styles.nextButtonDisabled
         ]} 
         onPress={handleCreateGroup}
-        disabled={selected.length === 0}
+        disabled={selected.length === 0 || !isAdmin}
       >
         <Text style={styles.nextButtonText}>→</Text>
       </TouchableOpacity>
@@ -111,17 +198,46 @@ const styles = StyleSheet.create({
     padding: 20,
     backgroundColor: "#ECE5DD"
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#ECE5DD"
+  },
   title: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#25D366",
     marginTop: 10,
     marginBottom: 5,
+    textAlign: "center",
   },
   subtitle: {
     fontSize: 14,
     color: "#25D366",
     marginBottom: 20,
+    textAlign: "center",
+  },
+  communityNote: {
+    fontSize: 12,
+    color: "#075E54",
+    textAlign: "center",
+    fontStyle: "italic",
+    marginBottom: 10,
+    backgroundColor: "#FFFFFF",
+    padding: 8,
+    borderRadius: 8,
+  },
+  // 🆕 ADMIN BADGE STYLE
+  adminBadge: {
+    fontSize: 12,
+    color: "#FFD700",
+    textAlign: "center",
+    fontWeight: "bold",
+    marginBottom: 10,
+    backgroundColor: "#2C2C2C",
+    padding: 8,
+    borderRadius: 8,
   },
   list: {
     flex: 1,

@@ -42,7 +42,7 @@ const RegisterScreen = ({ navigation }: Props) => {
     try {
       await register(name.value, email.value, password.value);
       Alert.alert('Success', 'Account created successfully!');
-      navigation.navigate('Dashboard');
+      navigation.navigate('SubscriptionScreen');
     } catch (err: any) {
       Alert.alert('Registration Error', err.message);
     }

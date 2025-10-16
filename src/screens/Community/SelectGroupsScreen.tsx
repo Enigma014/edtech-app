@@ -20,29 +20,60 @@ export default function SelectGroupsScreen({ route, navigation }) {
   
   const currentUser = authService.currentUser;
 
+  // 🆕 FIXED: Single useEffect with admin check
   useEffect(() => {
     if (!currentUser?.uid) return;
 
-    const unsubscribe = firestore()
-      .collection('groups')
-      .where('admin', '==', currentUser.uid)
-      .onSnapshot(
-        snapshot => {
-          const groupsData = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-          setGroups(groupsData);
-          setLoading(false);
-        },
-        error => {
-          console.error("Error fetching admin groups:", error);
-          setLoading(false);
+    const checkCommunityAdminAndLoadGroups = async () => {
+      try {
+        // 🆕 FIRST: Check if user is community admin
+        const communityDoc = await firestore()
+          .collection("communities")
+          .doc(communityId)
+          .get();
+        
+        const communityData = communityDoc.data();
+        if (communityData && communityData.admin !== currentUser.uid) {
+          Alert.alert("Access Denied", "Only community admin can add groups");
+          navigation.goBack();
+          return;
         }
-      );
 
-    return unsubscribe;
-  }, [currentUser?.uid]);
+        // 🆕 SECOND: Only load groups if user is admin
+        const unsubscribe = firestore()
+          .collection('groups')
+          .where('admin', '==', currentUser.uid)
+          .where('isCommunityGroup', '!=', true) // 🆕 EXCLUDE GROUPS ALREADY IN COMMUNITIES
+          .onSnapshot(
+            snapshot => {
+              const groupsData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+              }));
+              setGroups(groupsData);
+              setLoading(false);
+            },
+            error => {
+              console.error("Error fetching admin groups:", error);
+              setLoading(false);
+            }
+          );
+
+        return unsubscribe;
+
+      } catch (error) {
+        console.error("Error checking admin status:", error);
+        Alert.alert("Error", "Failed to verify permissions");
+        navigation.goBack();
+        setLoading(false);
+      }
+    };
+
+    const unsubscribe = checkCommunityAdminAndLoadGroups();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [currentUser?.uid, communityId]);
 
   const toggleGroupSelection = (groupId) => {
     setSelectedGroups(prev => 
@@ -66,6 +97,13 @@ export default function SelectGroupsScreen({ route, navigation }) {
         const groupData = groupDoc.data();
 
         if (groupData) {
+          // 🆕 CHECK IF GROUP IS ALREADY IN A COMMUNITY
+          if (groupData.communityId) {
+            Alert.alert("Error", `Group "${groupData.name}" is already in another community`);
+            setLoading(false);
+            return;
+          }
+
           // Update group to be part of community
           await firestore().collection("groups").doc(groupId).update({
             communityId: communityId,
@@ -88,13 +126,19 @@ export default function SelectGroupsScreen({ route, navigation }) {
               members: groupData.members || [],
               createdBy: groupData.createdBy || currentUser.uid,
               admin: groupData.admin || currentUser.uid,
+              isCommunityGroup: true, // 🆕 ADD THIS
+              communityId: communityId, // 🆕 ADD THIS
             });
         }
       }
 
       setLoading(false);
-      Alert.alert("Success", `${selectedGroups.length} group(s) added to community`);
-      navigation.goBack();
+      Alert.alert("Success", `${selectedGroups.length} group(s) added to community`, [
+        {
+          text: "OK",
+          onPress: () => navigation.navigate('CommunityScreen') // 🆕 NAVIGATE TO COMMUNITY SCREEN
+        }
+      ]);
       
     } catch (error) {
       console.error("Error adding groups to community:", error);
@@ -127,8 +171,13 @@ export default function SelectGroupsScreen({ route, navigation }) {
       <View style={styles.infoBox}>
         <Text style={styles.infoTitle}>Select Groups to Add</Text>
         <Text style={styles.infoText}>
-          Choose from groups where you are an admin. These groups will be added to your community.
+          Choose from groups where you are an admin and not already in a community.
         </Text>
+        {/* 🆕 ADD ADMIN BADGE */}
+        <View style={styles.adminBadge}>
+          <Icon name="admin-panel-settings" size={16} color="#FFD700" />
+          <Text style={styles.adminBadgeText}>You are the community admin</Text>
+        </View>
       </View>
 
       {/* Groups List */}
@@ -143,6 +192,7 @@ export default function SelectGroupsScreen({ route, navigation }) {
               selectedGroups.includes(item.id) && styles.groupItemSelected
             ]}
             onPress={() => toggleGroupSelection(item.id)}
+            disabled={item.communityId} // 🆕 DISABLE IF ALREADY IN COMMUNITY
           >
             <View style={styles.groupInfo}>
               <View style={styles.groupAvatar}>
@@ -157,7 +207,7 @@ export default function SelectGroupsScreen({ route, navigation }) {
                 </Text>
                 {item.communityId && (
                   <Text style={styles.alreadyInCommunity}>
-                    Already in another community
+                    ⚠️ Already in another community
                   </Text>
                 )}
               </View>
@@ -170,6 +220,9 @@ export default function SelectGroupsScreen({ route, navigation }) {
             ]}>
               {selectedGroups.includes(item.id) && (
                 <Icon name="check" size={16} color="#fff" />
+              )}
+              {item.communityId && (
+                <Icon name="block" size={16} color="#fff" />
               )}
             </View>
           </TouchableOpacity>
@@ -190,13 +243,13 @@ export default function SelectGroupsScreen({ route, navigation }) {
         <TouchableOpacity
           style={[
             styles.addButton,
-            selectedGroups.length === 0 && styles.addButtonDisabled
+            (selectedGroups.length === 0 || loading) && styles.addButtonDisabled
           ]}
           onPress={addGroupsToCommunity}
           disabled={selectedGroups.length === 0 || loading}
         >
           <Text style={styles.addButtonText}>
-            {loading ? "Adding..." : `Add ${selectedGroups.length} Group(s)`}
+            {loading ? "Adding..." : `Add ${selectedGroups.length} Group(s) to Community`}
           </Text>
         </TouchableOpacity>
       )}
@@ -243,6 +296,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     lineHeight: 20,
+    marginBottom: 10,
+  },
+  // 🆕 ADD ADMIN BADGE STYLES
+  adminBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#2C2C2C",
+    padding: 8,
+    borderRadius: 6,
+  },
+  adminBadgeText: {
+    color: "#FFD700",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginLeft: 6,
   },
   groupsList: {
     flex: 1,

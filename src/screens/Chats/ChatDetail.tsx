@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -9,57 +9,149 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
+  Alert,
+  Modal,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import firestore from "@react-native-firebase/firestore";
+import {
+  listenMessages,
+  sendMessage,
+  markMessagesAsRead,
+  deleteMessage,
+  deleteAllMessages,
+  loadMoreMessages,
+  generateChatId,
+} from "../../utils/firebase/Chat";
+import auth from "@react-native-firebase/auth";
 
+const ChatDetailScreen = ({ route, navigation }: any) => {
+  const { chatId: initialChatId, name, receiverId, isGroup, contactId } = route.params;
+  const currentUserId = auth().currentUser?.uid;
 
-const ChatDetailScreen = ({ route, navigation }) => {
-  const { chatId, name } = route.params;
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [lastDoc, setLastDoc] = useState<any>(null);
+  const [menuVisible, setMenuVisible] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
 
+  const chatId = initialChatId || generateChatId(currentUserId, receiverId);
+
+  // ✅ Listen to real-time chat messages
   useEffect(() => {
-    const unsubscribe = firestore()
-      .collection("chats")
-      .doc(chatId)
-      .collection("messages")
-      .orderBy("createdAt", "asc")
-      .onSnapshot((snapshot) => {
-        const msgData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setMessages(msgData);
-      });
-
-    return () => unsubscribe();
+    if (!chatId) return;
+    const unsubscribe = listenMessages(chatId, (msgs: any[], lastDoc: any) => {
+      setMessages(msgs);
+      setLastDoc(lastDoc);
+    });
+    return () => unsubscribe && unsubscribe();
   }, [chatId]);
 
+  // ✅ Mark messages as read on entering chat
+  useEffect(() => {
+    if (chatId && currentUserId) {
+      markMessagesAsRead(chatId, currentUserId);
+    }
+  }, [chatId, currentUserId]);
+
+  // ✅ Send message
   const handleSend = async () => {
-    if (!message.trim()) return;
-
-    const msg = {
-      text: message,
-      createdAt: firestore.FieldValue.serverTimestamp(),
-      senderId: "user1",
+    if (!message.trim() || !currentUserId) return;
+    const optimisticMsg = {
+      id: `temp-${Date.now()}`,
+      text: message.trim(),
+      senderId: currentUserId,
+      receiverId,
+      createdAt: new Date(),
+      isOptimistic: true,
     };
-
-    await firestore()
-      .collection("chats")
-      .doc(chatId)
-      .collection("messages")
-      .add(msg);
-
-    await firestore().collection("chats").doc(chatId).set(
-      {
-        lastMessage: message,
-        updatedAt: firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
-
+    setMessages((prev) => [...prev, optimisticMsg]);
     setMessage("");
+
+    try {
+      await sendMessage(chatId, currentUserId, receiverId, message, null);
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
+  };
+
+  // ✅ Load more messages (pagination)
+  const handleLoadMore = async () => {
+    if (!chatId || !lastDoc) return;
+    const { messages: newMessages, lastDoc: newLastDoc } = await loadMoreMessages(chatId, lastDoc);
+    setMessages((prev) => [...newMessages, ...prev]);
+    setLastDoc(newLastDoc);
+  };
+
+  // ✅ Delete single message
+  const handleDeleteMessage = (messageId: string) => {
+    Alert.alert("Delete Message", "Are you sure you want to delete this message?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteMessage(chatId, messageId);
+            setMessages((prev) => prev.filter((m) => m.id !== messageId));
+          } catch (error) {
+            console.error("Error deleting message:", error);
+          }
+        },
+      },
+    ]);
+  };
+
+  // ✅ Clear all messages
+  const handleClearChat = () => {
+    Alert.alert("Clear Chat", "This will delete all messages in the chat.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Clear",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteAllMessages(chatId, currentUserId);
+            setMessages([]);
+          } catch (error) {
+            console.error("Error clearing chat:", error);
+          }
+        },
+      },
+    ]);
+  };
+
+  // ✅ Open contact or group info
+  const handleViewInfo = () => {
+    setMenuVisible(false);
+    if (isGroup) navigation.navigate("GroupInfoScreen", { groupId: chatId });
+    if (contactId) navigation.navigate("ContactProfileScreen", { contactId });
+  };
+
+  // ✅ Render message
+  const renderItem = ({ item }: any) => {
+    const isMyMessage = item.senderId === currentUserId;
+    return (
+      <TouchableOpacity
+        onLongPress={() => handleDeleteMessage(item.id)}
+        activeOpacity={0.7}
+      >
+        <View
+          style={[
+            styles.messageRow,
+            isMyMessage ? styles.myMessageRow : styles.theirMessageRow,
+          ]}
+        >
+          <View
+            style={[
+              styles.messageBubble,
+              isMyMessage ? styles.myMessage : styles.theirMessage,
+            ]}
+          >
+            <Text style={styles.messageText}>{item.text}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
@@ -68,68 +160,36 @@ const ChatDetailScreen = ({ route, navigation }) => {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <SafeAreaView style={styles.container}>
-        {/* Header */}
+        {/* ✅ Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <TouchableOpacity onPress={() => navigation.goBack()}>
               <Icon name="arrow-left" size={24} color="#000" />
             </TouchableOpacity>
-            <TouchableOpacity
-  onPress={() => {
-    const { isGroup, contactId } = route.params || {};
-    console.log("Pressed chat name → Params:", route.params);
 
-    if (isGroup) {
-      navigation.navigate("GroupInfoScreen", { groupId: chatId });
-    } else if (contactId) {
-      navigation.navigate("ContactProfileScreen", { contactId });
-    } else {
-      console.warn("No valid navigation target found.");
-    }
-  }}
->
-  <Text style={styles.contactName}>{name}</Text>
-</TouchableOpacity>
-
-
-
+            <TouchableOpacity onPress={handleViewInfo}>
+              <Text style={styles.contactName}>{name}</Text>
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.headerIcons}>
-            {/* <Icon name="phone-outline" size={22} color="#000" style={styles.headerIcon} /> */}
+          <TouchableOpacity onPress={() => setMenuVisible(true)}>
             <Icon name="dots-vertical" size={22} color="#000" />
-          </View>
+          </TouchableOpacity>
         </View>
 
-        {/* Messages */}
-        <FlatList<any>
+        {/* ✅ Chat Messages */}
+        <FlatList
+          ref={flatListRef}
           data={messages}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => item.id || `msg-${index}`}
           contentContainerStyle={styles.chatContainer}
-          renderItem={({ item }) => (
-            <View
-              style={[
-                styles.messageRow,
-                item.senderId === "user1"
-                  ? styles.myMessageRow
-                  : styles.theirMessageRow,
-              ]}
-            >
-              <View
-                style={[
-                  styles.messageBubble,
-                  item.senderId === "user1"
-                    ? styles.myMessage
-                    : styles.theirMessage,
-                ]}
-              >
-                <Text style={styles.messageText}>{item.text}</Text>
-              </View>
-            </View>
-          )}
+          renderItem={renderItem}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.2}
         />
 
-        {/* Bottom Input */}
+        {/* ✅ Input Bar */}
         <View style={styles.bottomWrapper}>
           <View style={styles.inputWrapper}>
             <Icon name="emoticon-outline" size={24} color="gray" style={styles.iconLeft} />
@@ -145,18 +205,41 @@ const ChatDetailScreen = ({ route, navigation }) => {
           </View>
 
           <TouchableOpacity style={styles.micButton} onPress={handleSend}>
-            <Icon name="microphone" size={22} color="#fff" />
+            <Icon name="send" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
+
+        {/* ✅ Options Menu */}
+        <Modal
+          transparent
+          visible={menuVisible}
+          animationType="fade"
+          onRequestClose={() => setMenuVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setMenuVisible(false)}
+          >
+            <View style={styles.menuContainer}>
+              <TouchableOpacity onPress={handleViewInfo} style={styles.menuItem}>
+                <Text style={styles.menuText}>View Info</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleClearChat} style={styles.menuItem}>
+                <Text style={[styles.menuText, { color: "red" }]}>Clear Chat</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </SafeAreaView>
     </KeyboardAvoidingView>
   );
 };
 
+export default ChatDetailScreen;
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#ECE5DD" },
-
-  // ✅ Header styling
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -168,58 +251,20 @@ const styles = StyleSheet.create({
   },
   headerLeft: { flexDirection: "row", alignItems: "center" },
   contactName: { fontSize: 18, fontWeight: "600", marginLeft: 10 },
-  headerIcons: { flexDirection: "row", alignItems: "center" },
-  headerIcon: { marginHorizontal: 6 },
-
-  // ✅ FIXED Chat area - Proper alignment
-  chatContainer: { 
-    padding: 10,
-    flexGrow: 1,
-  },
-  messageRow: {
-    flexDirection: "row",
-    marginVertical: 4,
-    paddingHorizontal: 8,
-  },
-  
-  myMessageRow: {
-    justifyContent: "flex-end",
-  },
-  
-  theirMessageRow: {
-    justifyContent: "flex-start",
-  },
-  
-  messageBubble: {
-    padding: 12,
-    borderRadius: 8,
-    maxWidth: "80%",
-  },
-  
-  myMessage: {
-    backgroundColor: "#dcf8c6",
-    borderTopRightRadius: 0,
-  },
-  
-  theirMessage: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 0,
-  },
-  
-  messageText: { 
-    color: "#000", 
-    fontSize: 16,
-    lineHeight: 20,
-  },
-
-  // ✅ Input bar styling
+  chatContainer: { padding: 10, flexGrow: 1 },
+  messageRow: { flexDirection: "row", marginVertical: 4, paddingHorizontal: 8 },
+  myMessageRow: { justifyContent: "flex-end" },
+  theirMessageRow: { justifyContent: "flex-start" },
+  messageBubble: { padding: 12, borderRadius: 8, maxWidth: "80%" },
+  myMessage: { backgroundColor: "#dcf8c6", borderTopRightRadius: 0 },
+  theirMessage: { backgroundColor: "#fff", borderTopLeftRadius: 0 },
+  messageText: { color: "#000", fontSize: 16, lineHeight: 20 },
   bottomWrapper: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 10,
     paddingVertical: 6,
     backgroundColor: "#fff",
-    marginBottom: 0,
   },
   inputWrapper: {
     flexDirection: "row",
@@ -229,12 +274,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 10,
   },
-  textInput: {
-    flex: 1,
-    fontSize: 15,
-    color: "#000",
-    paddingVertical: 6,
-  },
+  textInput: { flex: 1, fontSize: 15, color: "#000", paddingVertical: 6 },
   iconLeft: { marginRight: 5 },
   iconRight: { marginLeft: 10 },
   micButton: {
@@ -246,6 +286,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: 8,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.1)",
+    justifyContent: "flex-start",
+    alignItems: "flex-end",
+  },
+  menuContainer: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    marginTop: 60,
+    marginRight: 15,
+    width: 150,
+    paddingVertical: 8,
+    elevation: 5,
+  },
+  menuItem: { paddingVertical: 10, paddingHorizontal: 15 },
+  menuText: { fontSize: 16, color: "#000" },
 });
-
-export default ChatDetailScreen;

@@ -1,27 +1,6 @@
-// chat.ts for React Native ✅
-
-import { db, storage } from "../firebaseConfig"; // ✅ no .js extension in RN
-import {
-  collection,
-  addDoc,
-  query,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-  limit,
-  startAfter,
-  getDocs,
-  doc,
-  setDoc,
-  increment,
-  writeBatch,
-  where,
-  getDoc,
-  updateDoc,
-  deleteDoc,
-} from "firebase/firestore";
-
-import { ref as storageRef, deleteObject } from "firebase/storage";
+// chat.ts (React Native ✅)
+import firestore from "@react-native-firebase/firestore";
+import storage from "@react-native-firebase/storage";
 
 /** 
  * Generate consistent chatId from two userIds 
@@ -50,7 +29,7 @@ export async function sendMessage(
   const messagePayload: any = {
     senderId,
     receiverId,
-    createdAt: serverTimestamp(),
+    createdAt: firestore.FieldValue.serverTimestamp(),
     isRead: false,
     readAt: null,
   };
@@ -60,7 +39,6 @@ export async function sendMessage(
   }
 
   if (fileData) {
-    // ✅ In RN, always upload first → pass downloadURL to fileData
     messagePayload.fileUrl = fileData.downloadURL;
     messagePayload.fileName = fileData.fileName || null;
     messagePayload.fileType = fileData.fileType || null;
@@ -81,22 +59,25 @@ export async function sendMessage(
   }
 
   try {
-    const messagesRef = collection(db, "chats", chatId, "messages");
-    const messageDoc = await addDoc(messagesRef, messagePayload);
+    const messagesRef = firestore()
+      .collection("chats")
+      .doc(chatId)
+      .collection("messages");
 
-    const summaryRef = doc(db, "chatSummaries", chatId);
+    const messageDoc = await messagesRef.add(messagePayload);
+
+    const summaryRef = firestore().collection("chatSummaries").doc(chatId);
     const lastMessageText = fileData ? "📷 Image" : text.trim();
 
-    await setDoc(
-      summaryRef,
+    await summaryRef.set(
       {
         users: [senderId, receiverId],
         lastMessage: lastMessageText,
         lastSender: senderId,
         lastReceiver: receiverId,
         lastMessageId: messageDoc.id,
-        lastTimestamp: serverTimestamp(),
-        [`unread_${receiverId}`]: increment(1),
+        lastTimestamp: firestore.FieldValue.serverTimestamp(),
+        [`unread_${receiverId}`]: firestore.FieldValue.increment(1),
       },
       { merge: true }
     );
@@ -114,14 +95,15 @@ export async function sendMessage(
 export function listenMessages(chatId: string, callback: any, limitCount = 30) {
   if (!chatId) return;
 
-  const q = query(
-    collection(db, "chats", chatId, "messages"),
-    orderBy("createdAt", "desc"),
-    limit(limitCount)
-  );
+  const q = firestore()
+    .collection("chats")
+    .doc(chatId)
+    .collection("messages")
+    .orderBy("createdAt", "desc")
+    .limit(limitCount);
 
-  return onSnapshot(q, (snapshot) => {
-    const msgs = snapshot.docs.map((doc) => {
+  return q.onSnapshot(snapshot => {
+    const msgs = snapshot.docs.map(doc => {
       const data = doc.data();
       return {
         id: doc.id,
@@ -138,7 +120,6 @@ export function listenMessages(chatId: string, callback: any, limitCount = 30) {
         fileSize: data.fileSize || null,
       };
     });
-
     callback(msgs.reverse(), snapshot.docs[snapshot.docs.length - 1] || null);
   });
 }
@@ -149,16 +130,17 @@ export function listenMessages(chatId: string, callback: any, limitCount = 30) {
 export async function loadMoreMessages(chatId: string, lastDoc: any, limitCount = 30) {
   if (!chatId || !lastDoc) return { messages: [], lastDoc: null };
 
-  const q = query(
-    collection(db, "chats", chatId, "messages"),
-    orderBy("createdAt", "desc"),
-    startAfter(lastDoc),
-    limit(limitCount)
-  );
+  const q = firestore()
+    .collection("chats")
+    .doc(chatId)
+    .collection("messages")
+    .orderBy("createdAt", "desc")
+    .startAfter(lastDoc)
+    .limit(limitCount);
 
-  const snapshot = await getDocs(q);
+  const snapshot = await q.get();
 
-  const messages = snapshot.docs.map((doc) => {
+  const messages = snapshot.docs.map(doc => {
     const data = doc.data();
     return {
       id: doc.id,
@@ -185,26 +167,34 @@ export async function loadMoreMessages(chatId: string, lastDoc: any, limitCount 
 export async function markMessagesAsRead(chatId: string, currentUserId: string) {
   if (!chatId || !currentUserId) return;
 
-  const q = query(
-    collection(db, "chats", chatId, "messages"),
-    where("receiverId", "==", currentUserId),
-    where("isRead", "==", false)
-  );
+  const q = firestore()
+    .collection("chats")
+    .doc(chatId)
+    .collection("messages")
+    .where("receiverId", "==", currentUserId)
+    .where("isRead", "==", false);
 
-  const snapshot = await getDocs(q);
+  const snapshot = await q.get();
   if (snapshot.empty) return;
 
-  const batch = writeBatch(db);
+  const batch = firestore().batch();
 
-  snapshot.docs.forEach((docSnap) => {
-    batch.update(docSnap.ref, { isRead: true, readAt: serverTimestamp() });
+  snapshot.docs.forEach(docSnap => {
+    batch.update(docSnap.ref, {
+      isRead: true,
+      readAt: firestore.FieldValue.serverTimestamp(),
+    });
   });
 
-  const summaryRef = doc(db, "chatSummaries", chatId);
-  batch.set(summaryRef, {
-    [`unread_${currentUserId}`]: 0,
-    [`seenAt_${currentUserId}`]: serverTimestamp(),
-  }, { merge: true });
+  const summaryRef = firestore().collection("chatSummaries").doc(chatId);
+  batch.set(
+    summaryRef,
+    {
+      [`unread_${currentUserId}`]: 0,
+      [`seenAt_${currentUserId}`]: firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
 
   await batch.commit();
 }
@@ -215,12 +205,11 @@ export async function markMessagesAsRead(chatId: string, currentUserId: string) 
 async function deleteFileFromUrl(fileUrl: string) {
   try {
     if (!fileUrl) return;
-    // ✅ Convert Firebase download URL into storage path
     const path = fileUrl
       .replace(/^https?:\/\/firebasestorage\.googleapis\.com\/v0\/b\/[^/]+\/o\//, "")
       .split("?")[0];
-    const fileRef = storageRef(storage, decodeURIComponent(path));
-    await deleteObject(fileRef);
+    const ref = storage().ref(decodeURIComponent(path));
+    await ref.delete();
   } catch (err) {
     console.error("Error deleting file from storage:", err);
   }
@@ -230,36 +219,46 @@ async function deleteFileFromUrl(fileUrl: string) {
  * Delete one message 
  */
 export async function deleteMessage(chatId: string, messageId: string) {
-  const messageRef = doc(db, "chats", chatId, "messages", messageId);
-  const snap = await getDoc(messageRef);
+  const messageRef = firestore()
+    .collection("chats")
+    .doc(chatId)
+    .collection("messages")
+    .doc(messageId);
 
-  if (snap.exists()) {
+  const snap = await messageRef.get();
+
+  if (snap.exists) {
     const data = snap.data();
-    if (data.fileUrl) await deleteFileFromUrl(data.fileUrl);
+    if (data?.fileUrl) await deleteFileFromUrl(data.fileUrl);
   }
 
-  await deleteDoc(messageRef);
+  await messageRef.delete();
 
-  const messagesRef = collection(db, "chats", chatId, "messages");
-  const summaryRef = doc(db, "chatSummaries", chatId);
-  const snapshot = await getDocs(query(messagesRef, orderBy("createdAt", "desc"), limit(1)));
+  // Update summary
+  const messagesRef = firestore()
+    .collection("chats")
+    .doc(chatId)
+    .collection("messages");
+
+  const summaryRef = firestore().collection("chatSummaries").doc(chatId);
+  const snapshot = await messagesRef.orderBy("createdAt", "desc").limit(1).get();
 
   if (!snapshot.empty) {
     const lastMsg = snapshot.docs[0].data();
-    await updateDoc(summaryRef, {
+    await summaryRef.update({
       lastMessage: lastMsg.text || "",
       lastSender: lastMsg.senderId || "",
       lastReceiver: lastMsg.receiverId || "",
       lastMessageId: snapshot.docs[0].id,
-      lastTimestamp: lastMsg.createdAt || serverTimestamp(),
+      lastTimestamp: lastMsg.createdAt || firestore.FieldValue.serverTimestamp(),
     });
   } else {
-    await updateDoc(summaryRef, {
+    await summaryRef.update({
       lastMessage: "",
       lastSender: "",
       lastReceiver: "",
       lastMessageId: null,
-      lastTimestamp: serverTimestamp(),
+      lastTimestamp: firestore.FieldValue.serverTimestamp(),
     });
   }
 }
@@ -268,24 +267,29 @@ export async function deleteMessage(chatId: string, messageId: string) {
  * Delete all messages in a chat 
  */
 export async function deleteAllMessages(chatId: string, currentUserId: string) {
-  const messagesRef = collection(db, "chats", chatId, "messages");
-  const snapshot = await getDocs(messagesRef);
+  const messagesRef = firestore()
+    .collection("chats")
+    .doc(chatId)
+    .collection("messages");
 
-  const batch = writeBatch(db);
+  const snapshot = await messagesRef.get();
+  const batch = firestore().batch();
+
   for (const docSnap of snapshot.docs) {
     const data = docSnap.data();
     if (data.fileUrl) await deleteFileFromUrl(data.fileUrl);
     batch.delete(docSnap.ref);
   }
+
   await batch.commit();
 
-  const summaryRef = doc(db, "chatSummaries", chatId);
-  await updateDoc(summaryRef, {
+  const summaryRef = firestore().collection("chatSummaries").doc(chatId);
+  await summaryRef.update({
     lastMessage: "",
     lastSender: "",
     lastReceiver: "",
     lastMessageId: null,
-    lastTimestamp: serverTimestamp(),
+    lastTimestamp: firestore.FieldValue.serverTimestamp(),
     [`unread_${currentUserId}`]: 0,
   });
 }

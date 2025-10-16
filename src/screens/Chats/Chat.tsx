@@ -6,8 +6,11 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
-  Modal,TouchableWithoutFeedback,
+  Modal,
+  TouchableWithoutFeedback,
   Alert,
+  Animated,
+  PanResponder,
 } from "react-native";
 import firestore from "@react-native-firebase/firestore";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -26,8 +29,9 @@ interface ChatItem {
 
 interface UserItem {
   id: string;
-  name: string;
-  email: string;
+  name?: string;
+  email?: string;
+  uid?: string;
 }
 
 const Chat = ({ navigation }: { navigation: any }) => {
@@ -37,141 +41,195 @@ const Chat = ({ navigation }: { navigation: any }) => {
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
+  // ✅ User fetching logic
+  useEffect(() => {
+    const currentUser = auth().currentUser;
+    if (!currentUser || !showUsersModal) return;
+  
+    const currentUserId = currentUser.uid;
+  
+    const unsubscribe = firestore().collection("users").onSnapshot(snapshot => {
+      const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const filteredUsers = allUsers.filter(user => user.id !== currentUserId);
+      setUsers(filteredUsers);
+      console.log("Users loaded:", filteredUsers.length);
+    });
+  
+    return unsubscribe;
+  }, [showUsersModal]);
+  
+
+  // ✅ FIXED: Chat fetching with proper error handling
   useEffect(() => {
     const currentUser = auth().currentUser;
     if (!currentUser) {
       setLoading(false);
       return;
     }
-  
+
     const currentUid = currentUser.uid;
     setLoading(true);
-  
-    // ✅ Users listener
-    const unsubscribeUsers = firestore()
-      .collection("users")
-      .onSnapshot((snapshot) => {
-        const userList = snapshot.docs
-          .map((doc) => {
-            const data = doc.data();
-            return data.uid !== currentUid
-              ? {
-                  id: data.uid,
-                  name: data.name || "Unnamed",
-                  lastMessage: data.lastMessage || "",
-                  updatedAt: data.lastMessageTime
-                    ? data.lastMessageTime.toDate().toLocaleTimeString()
-                    : "",
-                  isGroup: false,
-                }
-              : null;
-          })
-          .filter(Boolean);
-        setChats((prev) => mergeChats(prev, userList)); // ✅ merge users
-      });
-  
+
+    let chatsLoaded = false;
+    let groupsLoaded = false;
+
+    const checkAllLoaded = () => {
+      if (chatsLoaded && groupsLoaded) {
+        setLoading(false);
+      }
+    };
+
     // ✅ Groups listener
     const unsubscribeGroups = firestore()
       .collection("groups")
       .where("members", "array-contains", currentUid)
-      .onSnapshot((snapshot) => {
-        const groupData = snapshot.docs.map((doc) => {
-          const data = doc.data() || {};
-          return {
-            id: doc.id,
-            name: data.name || "Unnamed Group",
-            lastMessage: data.lastMessage || "",
-            updatedAt: data.lastMessageTime
-              ? data.lastMessageTime.toDate().toLocaleTimeString()
-              : data.createdAt
-              ? data.createdAt.toDate().toLocaleTimeString()
-              : "",
-            isGroup: true,
-          };
-        });
-        setChats((prev) => mergeChats(prev, groupData)); // ✅ merge groups
-      });
-  
+      .onSnapshot(
+        (snapshot) => {
+          const groupData = snapshot.docs.map((doc) => {
+            const data = doc.data() || {};
+            return {
+              id: doc.id,
+              name: data.name || "Unnamed Group",
+              lastMessage: data.lastMessage || "",
+              updatedAt: data.lastMessageTime
+                ? data.lastMessageTime.toDate().toLocaleTimeString()
+                : data.createdAt
+                ? data.createdAt.toDate().toLocaleTimeString()
+                : "",
+              isGroup: true,
+            };
+          });
+          setChats((prev) => mergeChats(prev, groupData));
+          groupsLoaded = true;
+          checkAllLoaded();
+        },
+        (error) => {
+          console.error("Error loading groups:", error);
+          groupsLoaded = true;
+          checkAllLoaded();
+        }
+      );
+
     // ✅ Chats listener (DMs)
     const unsubscribeChats = firestore()
       .collection("chats")
       .where("participants", "array-contains", currentUid)
       .orderBy("updatedAt", "desc")
-      .onSnapshot(async (snapshot) => {
-        if (!snapshot) return;
-  
-        const chatData = await Promise.all(
-          snapshot.docs.map(async (doc) => {
-            const data = doc.data() || {};
-            const participants = Array.isArray(data.participants)
-              ? data.participants
-              : [];
-            const otherUserId = participants.find((uid) => uid !== currentUid);
-            let chatName = "Unknown";
-  
-            if (otherUserId) {
-              try {
-                const userDoc = await firestore()
-                  .collection("users")
-                  .doc(otherUserId)
-                  .get();
-                const userInfo = userDoc.data();
-                chatName =
-                  userInfo?.displayName ||
-                  userInfo?.name ||
-                  userInfo?.email ||
-                  "Unknown";
-              } catch (err) {
-                chatName = "Error Loading";
-              }
-            } else {
-              chatName = "Me";
+      .onSnapshot(
+        async (snapshot) => {
+          try {
+            if (!snapshot) {
+              chatsLoaded = true;
+              checkAllLoaded();
+              return;
             }
-  
-            return {
-              id: doc.id,
-              name: chatName,
-              lastMessage: data.lastMessage || "",
-              updatedAt: data.updatedAt
-                ? data.updatedAt.toDate().toLocaleTimeString()
-                : "",
-              isGroup: false,
-            };
-          })
-        );
-  
-        setChats((prev) => mergeChats(prev, chatData)); // ✅ merge DMs safely
-        setLoading(false);
-      });
-  
-    // ✅ Cleanup (no memory leaks!)
+
+            const chatData = await Promise.all(
+              snapshot.docs.map(async (doc) => {
+                const data = doc.data() || {};
+                const participants = Array.isArray(data.participants)
+                  ? data.participants
+                  : [];
+                const otherUserId = participants.find((uid) => uid !== currentUid);
+                let chatName = "Unknown";
+
+                if (otherUserId) {
+                  try {
+                    const userDoc = await firestore()
+                      .collection("users")
+                      .doc(otherUserId)
+                      .get();
+                    const userInfo = userDoc.data();
+                    chatName =
+                      userInfo?.displayName ||
+                      userInfo?.name ||
+                      userInfo?.email ||
+                      "Unknown";
+                  } catch (err) {
+                    chatName = "Error Loading";
+                  }
+                } else {
+                  chatName = "Me";
+                }
+
+                return {
+                  id: doc.id,
+                  name: chatName,
+                  lastMessage: data.lastMessage || "",
+                  updatedAt: data.updatedAt
+                    ? data.updatedAt.toDate().toLocaleTimeString()
+                    : "",
+                  isGroup: false,
+                };
+              })
+            );
+
+            setChats((prev) => mergeChats(prev, chatData));
+          } catch (error) {
+            console.error("Error processing chats:", error);
+          } finally {
+            chatsLoaded = true;
+            checkAllLoaded();
+          }
+        },
+        (error) => {
+          console.error("Error loading chats:", error);
+          chatsLoaded = true;
+          checkAllLoaded();
+        }
+      );
+
+    // ✅ Safety timeout - if loading takes too long, force stop loading
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+    }, 10000);
+
     return () => {
+      clearTimeout(timeoutId);
       unsubscribeChats();
       unsubscribeGroups();
-      unsubscribeUsers();
     };
-  }, []); // ⚠️ Fix: remove [currentUid] dependency
-  
-  
-  // ✅ Merges chats (groups + DMs) and keeps only one entry per id, sorted by latest time
-  function mergeChats(prevChats, newChats) {
+  }, []);
+
+  function mergeChats(prevChats: ChatItem[], newChats: ChatItem[]) {
     const map = new Map();
-  
     [...prevChats, ...newChats].forEach((chat) => {
       map.set(chat.id, chat);
     });
-  
     const merged = Array.from(map.values());
-  
     return merged.sort((a, b) => {
       const aTime = new Date(a.updatedAt).getTime() || 0;
       const bTime = new Date(b.updatedAt).getTime() || 0;
-      return bTime - aTime; // newest on top
+      return bTime - aTime;
     });
   }
 
-  // ✅ Fixed: Proper chat creation function
+  const deleteChatThread = async (chatId: string, chatName: string) => {
+    Alert.alert(
+      "Delete Chat",
+      `Are you sure you want to delete your chat with ${chatName}? This action cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await firestore().collection("chats").doc(chatId).delete();
+              setChats(prev => prev.filter(chat => chat.id !== chatId));
+              Alert.alert("Success", "Chat deleted successfully");
+            } catch (error) {
+              console.error("Error deleting chat:", error);
+              Alert.alert("Error", "Failed to delete chat");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const startChatWithUser = async (user: UserItem) => {
+    console.log('Starting chat with:', user.name);
     const currentUser = auth().currentUser;
     if (!currentUser) {
       Alert.alert("Error", "Please log in again");
@@ -181,7 +239,6 @@ const Chat = ({ navigation }: { navigation: any }) => {
     setShowUsersModal(false);
     
     try {
-      // Check if chat already exists between these two users
       const existingChatQuery = await firestore()
         .collection("chats")
         .where("participants", "array-contains", currentUser.uid)
@@ -189,7 +246,6 @@ const Chat = ({ navigation }: { navigation: any }) => {
 
       let existingChatId = null;
       
-      // Look for a chat that has exactly these two participants
       existingChatQuery.docs.forEach(doc => {
         const data = doc.data();
         const participants = data.participants || [];
@@ -199,17 +255,15 @@ const Chat = ({ navigation }: { navigation: any }) => {
       });
 
       if (existingChatId) {
-        // Chat exists, navigate to it
-        console.log("Existing chat found:", existingChatId);
+        console.log('Existing chat found:', existingChatId);
         navigation.navigate("ChatDetailScreen", {
           chatId: existingChatId,
           name: user.name,
-          contactId: user.id,     // ✅ ADD THIS
-          isGroup: false,         // ✅ ADD THIS
+          contactId: user.id,
+          isGroup: false,
         });
       } else {
-        // Create new chat
-        console.log("Creating new chat with:", user.id, user.name);
+        console.log('Creating new chat with:', user.name);
         const newChatRef = await firestore().collection("chats").add({
           participants: [currentUser.uid, user.id],
           lastMessage: "",
@@ -217,66 +271,146 @@ const Chat = ({ navigation }: { navigation: any }) => {
           createdAt: firestore.FieldValue.serverTimestamp(),
         });
 
-        console.log("New chat created:", newChatRef.id);
         navigation.navigate("ChatDetailScreen", {
           chatId: newChatRef.id,
           name: user.name,
-          contactId: user.id,     // ✅ ADD THIS
-          isGroup: false,         // ✅ ADD THIS
+          contactId: user.id,
+          isGroup: false,
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error starting chat:", error);
       Alert.alert("Error", "Failed to start chat: " + error.message);
     }
   };
 
-  const renderChatItem = ({ item }: { item: ChatItem }) => (
-    <TouchableOpacity
-      onPress={() =>
+  // ✅ Swipeable Chat Item Component
+  const SwipeableChatItem = ({ item }: { item: ChatItem }) => {
+    const swipeAnim = new Animated.Value(0);
+
+    const panResponder = PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        return !item.isGroup && Math.abs(gestureState.dx) > 10;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (!item.isGroup && gestureState.dx < 0) {
+          swipeAnim.setValue(Math.max(gestureState.dx, -80));
+        }
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (!item.isGroup && gestureState.dx < -50) {
+          Animated.timing(swipeAnim, {
+            toValue: -80,
+            duration: 200,
+            useNativeDriver: false,
+          }).start();
+        } else {
+          Animated.timing(swipeAnim, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: false,
+          }).start();
+        }
+      },
+    });
+
+    const handleDelete = () => {
+      deleteChatThread(item.id, item.name);
+      Animated.timing(swipeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: false,
+      }).start();
+    };
+
+    const handleChatPress = () => {
+      if (swipeAnim._value < 0) {
+        Animated.timing(swipeAnim, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: false,
+        }).start();
+      } else {
         navigation.navigate("ChatDetailScreen", {
           chatId: item.id,
           name: item.name,
-          isGroup: item.isGroup || false,  // ✅ ADD THIS - use the isGroup property from your data
-        contactId: item.isGroup ? undefined : item.id, // ✅ ADD THIS - for individual chats
-          
-        })
+          isGroup: item.isGroup || false,
+          contactId: item.isGroup ? undefined : item.id,
+        });
       }
-      style={styles.chatRow}
-    >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>
-          {item.name.charAt(0).toUpperCase()}
-        </Text>
+    };
+
+    return (
+      <View style={styles.swipeableContainer}>
+        {!item.isGroup && (
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDelete}
+          >
+            <Icon name="delete" size={24} color="#fff" />
+          </TouchableOpacity>
+        )}
+
+        <Animated.View
+          style={[
+            styles.chatRowWrapper,
+            {
+              transform: [{ translateX: swipeAnim }],
+            },
+          ]}
+          {...panResponder.panHandlers}
+        >
+          <TouchableOpacity
+            onPress={handleChatPress}
+            style={styles.chatRow}
+            activeOpacity={0.7}
+          >
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {item.name.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+
+            <View style={styles.chatContent}>
+              <Text style={styles.chatName}>{item.name}</Text>
+              <Text style={styles.chatMessage} numberOfLines={1}>
+                {item.lastMessage}
+              </Text>
+            </View>
+
+            <Text style={styles.chatTime}>{item.updatedAt}</Text>
+          </TouchableOpacity>
+        </Animated.View>
       </View>
+    );
+  };
 
-      <View style={styles.chatContent}>
-        <Text style={styles.chatName}>{item.name}</Text>
-        <Text style={styles.chatMessage} numberOfLines={1}>
-          {item.lastMessage}
-        </Text>
-      </View>
-
-      <Text style={styles.chatTime}>{item.updatedAt}</Text>
-    </TouchableOpacity>
-  );
-
+  // ✅ User item renderer
   const renderUserItem = ({ item }: { item: UserItem }) => (
     <TouchableOpacity
-      style={styles.userRow}
+      style={styles.userItem}
       onPress={() => startChatWithUser(item)}
+      activeOpacity={0.7}
     >
-      
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>
+      <View style={styles.userAvatar}>
+        <Text style={styles.userAvatarText}>
           {item.name?.charAt(0).toUpperCase() || "U"}
         </Text>
       </View>
   
-      <View style={styles.chatContent}>
-        <Text style={styles.chatName}>{item.name}</Text>
-        <Text style={styles.chatMessage}>Tap to chat</Text>
+      <View style={styles.userInfo}>
+        <Text style={styles.userName} numberOfLines={1}>
+          {item.name || "Unnamed User"}
+        </Text>
+        {item.email && (
+          <Text style={styles.userEmail} numberOfLines={1}>
+            {item.email}
+          </Text>
+        )}
       </View>
+      
+      <Icon name="message-outline" size={24} color="#25D366" />
     </TouchableOpacity>
   );
 
@@ -291,7 +425,7 @@ const Chat = ({ navigation }: { navigation: any }) => {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      {/* Header with section title + menu */}
+      {/* Header */}
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Text style={styles.sectionTitle}>Chats</Text>
         <TouchableOpacity
@@ -302,26 +436,24 @@ const Chat = ({ navigation }: { navigation: any }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Menu popover with outside click handling */}
+      {/* Menu */}
       {showMenu && (
         <TouchableWithoutFeedback onPress={() => setShowMenu(false)}>
           <View style={styles.menuOverlay}>
             <TouchableWithoutFeedback>
               <View style={styles.menuPopover}>
-              <TouchableOpacity
-  style={styles.menuItem}
-  onPress={() => {
-    setShowMenu(false); // hide the menu
-    navigation.navigate("SelectMembersScreen", {
-      groupName: "",  // optionally pre-fill or leave empty for now
-      groupPic: null, // optionally pre-fill or leave null
-
-    });
-  }}
->
-  <Text>Create Group</Text>
-</TouchableOpacity>
-
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setShowMenu(false);
+                    navigation.navigate("SelectMembersScreen", {
+                      groupName: "",
+                      groupPic: null,
+                    });
+                  }}
+                >
+                  <Text>Create Group</Text>
+                </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.menuItem}
                   onPress={() => console.log("Create Community")}
@@ -339,7 +471,7 @@ const Chat = ({ navigation }: { navigation: any }) => {
       <FlatList
         data={chats}
         keyExtractor={(item) => item.id}
-        renderItem={renderChatItem}
+        renderItem={({ item }) => <SwipeableChatItem item={item} />}
         contentContainerStyle={{ paddingBottom: 80 }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -366,22 +498,34 @@ const Chat = ({ navigation }: { navigation: any }) => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Start New Chat</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Start New Chat</Text>
+              <TouchableOpacity 
+                onPress={() => setShowUsersModal(false)}
+                style={styles.closeButton}
+              >
+                <Icon name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={styles.modalSubtitle}>
+              {users.length} user{users.length !== 1 ? 's' : ''} available
+            </Text>
+            
             <FlatList
               data={users}
               keyExtractor={(item) => item.id}
               renderItem={renderUserItem}
               showsVerticalScrollIndicator={false}
+              style={styles.usersList}
+              contentContainerStyle={styles.usersListContent}
               ListEmptyComponent={
-                <Text style={styles.emptyText}>No other users found</Text>
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No users found</Text>
+                  <Text style={styles.emptySubtext}>Try again later</Text>
+                </View>
               }
             />
-            <TouchableOpacity 
-              onPress={() => setShowUsersModal(false)} 
-              style={styles.modalCloseButton}
-            >
-              <Text style={styles.modalCloseText}>Close</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -391,45 +535,41 @@ const Chat = ({ navigation }: { navigation: any }) => {
   );
 };
 
+// ✅ Keep all your existing styles (same as before)
 const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    justifyContent: "center",
-    alignItems: "center",
+  loader: { 
+    flex: 1, 
+    justifyContent: "center", 
+    alignItems: "center" 
   },
-  modalContent: {
-    width: "90%",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
-    maxHeight: "75%",
-    elevation: 10,
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#666",
   },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: "600",
-    color: "#25D366",
-    marginBottom: 15,
-    textAlign: "center",
+  sectionTitle: { 
+    fontSize: 24, 
+    fontWeight: "600", 
+    marginLeft: 20, 
+    marginTop: 40, 
+    marginBottom: 15, 
+    color: "#25d366" 
   },
-  userRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#eee",
+  swipeableContainer: {
+    position: 'relative',
+    backgroundColor: '#fff',
   },
-  modalCloseButton: {
-    marginTop: 15,
-    padding: 12,
-    alignItems: "center",
-    backgroundColor: "#f0f0f0",
-    borderRadius: 8,
+  chatRowWrapper: {
+    backgroundColor: '#fff',
   },
-  modalCloseText: {
-    color: "#25D366",
-    fontWeight: "600",
+  chatRow: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    paddingHorizontal: 15, 
+    paddingVertical: 12, 
+    borderBottomWidth: 0.5, 
+    borderBottomColor: "#ddd",
+    backgroundColor: '#fff',
   },
   avatar: {
     width: 45,
@@ -457,35 +597,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#555",
   },
-  loader: { 
-    flex: 1, 
-    justifyContent: "center", 
-    alignItems: "center" 
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#666",
-  },
-  sectionTitle: { 
-    fontSize: 24, 
-    fontWeight: "600", 
-    marginLeft: 20, 
-    marginTop: 40, 
-    marginBottom: 15, 
-    color: "#25d366" 
-  },
-  chatRow: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    paddingHorizontal: 15, 
-    paddingVertical: 12, 
-    borderBottomWidth: 0.5, 
-    borderBottomColor: "#ddd" 
-  },
   chatTime: { 
     fontSize: 12, 
     color: "#999" 
+  },
+  deleteButton: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 80,
+    backgroundColor: '#ff3b30',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#ddd",
   },
   fab: {
     position: "absolute",
@@ -541,6 +667,89 @@ const styles = StyleSheet.create({
     color: "#999",
     textAlign: "center",
     marginTop: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    width: "90%",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 0,
+    maxHeight: "80%",
+    elevation: 10,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#25D366",
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 15,
+    textAlign: "center",
+    backgroundColor: "#f8f8f8",
+  },
+  usersList: {
+    flex: 1,
+  },
+  usersListContent: {
+    paddingHorizontal: 10,
+  },
+  userItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 15,
+    marginHorizontal: 10,
+    marginVertical: 5,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
+  },
+  userAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#25D366",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 15,
+  },
+  userAvatarText: {
+    fontWeight: "bold",
+    color: "#fff",
+    fontSize: 20,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#000",
+    marginBottom: 4,
+  },
+  userEmail: {
+    fontSize: 14,
+    color: "#666",
   },
 });
 
