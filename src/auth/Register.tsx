@@ -1,5 +1,5 @@
 import React, { memo, useState } from 'react';
-import { TouchableOpacity, StyleSheet, Text, View, Alert } from 'react-native';
+import { TouchableOpacity, StyleSheet, Text, View, Alert, ActivityIndicator } from 'react-native';
 import Background from '../components/BackGround';
 import Logo from '../components/Logo';
 import Header from '../components/Header';
@@ -9,7 +9,6 @@ import TextInput from '../components/TextInput';
 import { theme } from '../core/theme';
 import { emailValidator, passwordValidator, nameValidator } from '../core/utils';
 import { Navigation } from '../types';
-
 import useRegisterStore from '@store/RegisterStore/RegisterStore';
 
 type Props = {
@@ -21,6 +20,7 @@ const RegisterScreen = ({ navigation }: Props) => {
   const [email, setEmail] = useState({ value: '', error: '' });
   const [password, setPassword] = useState({ value: '', error: '' });
   const [confirmPassword, setConfirmPassword] = useState({ value: '', error: '' });
+  const [loading, setLoading] = useState(false);
 
   const register = useRegisterStore((state) => state.register);
 
@@ -39,27 +39,32 @@ const RegisterScreen = ({ navigation }: Props) => {
       return;
     }
 
+    setLoading(true);
     try {
       await register(name.value, email.value, password.value);
-      Alert.alert('Success', 'Account created successfully!');
-      navigation.navigate('SubscriptionScreen');
+
+      Alert.alert(
+        'Verify Your Email',
+        'A verification link has been sent to your email address. Please verify before logging in.',
+        [{ text: 'OK', onPress: () => navigation.navigate('LoginScreen') }]
+      );
     } catch (err: any) {
-      Alert.alert('Registration Error', err.message);
+      console.error('Registration error:', err);
+      Alert.alert('Registration Error', err.message || 'Something went wrong.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <Background>
-
-
       <Logo />
-
       <Header>Create Account.</Header>
 
       <TextInput
         label="Full Name"
         value={name.value}
-        onChangeText={text => setName({ value: text, error: '' })}
+        onChangeText={(text) => setName({ value: text, error: '' })}
         error={!!name.error}
         errorText={name.error}
       />
@@ -67,7 +72,7 @@ const RegisterScreen = ({ navigation }: Props) => {
       <TextInput
         label="Email"
         value={email.value}
-        onChangeText={text => setEmail({ value: text, error: '' })}
+        onChangeText={(text) => setEmail({ value: text, error: '' })}
         error={!!email.error}
         errorText={email.error}
         autoComplete="email"
@@ -76,7 +81,7 @@ const RegisterScreen = ({ navigation }: Props) => {
       <TextInput
         label="Password"
         value={password.value}
-        onChangeText={text => setPassword({ value: text, error: '' })}
+        onChangeText={(text) => setPassword({ value: text, error: '' })}
         error={!!password.error}
         errorText={password.error}
         secureTextEntry
@@ -85,14 +90,24 @@ const RegisterScreen = ({ navigation }: Props) => {
       <TextInput
         label="Confirm Password"
         value={confirmPassword.value}
-        onChangeText={text => setConfirmPassword({ value: text, error: '' })}
+        onChangeText={(text) => setConfirmPassword({ value: text, error: '' })}
         error={!!confirmPassword.error}
         errorText={confirmPassword.error}
         secureTextEntry
       />
 
-      <Button title="Register" onPress={_onRegisterPressed} />
-      
+      <Button
+        title={loading ? 'Registering...' : 'Register'}
+        onPress={_onRegisterPressed}
+        disabled={loading}
+      />
+
+      {loading && (
+        <View style={{ marginTop: 10 }}>
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      )}
+
       <View style={styles.row}>
         <Text style={styles.label}>Already have an account? </Text>
         <TouchableOpacity onPress={() => navigation.navigate('LoginScreen')}>

@@ -7,6 +7,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import LoginScreen from './src/auth/Login';
 import RegisterScreen from './src/auth/Register';
+import ForgotPasswordScreen from './src/auth/models/ForgotPasswordScreen';
+
 import SettingsScreen from './src/screens/Settings/Settings';
 import CommunityScreen from './src/screens/Community/Community';
 import CreateCommunityScreen from './src/screens/Community/CreateCommunityScreen';
@@ -56,7 +58,13 @@ const App = () => {
               component={LoginScreen}
               options={{ headerShown: false }}
             />
-      <Stack.Screen
+            <Stack.Screen
+              name="ForgotPasswordScreen"
+              component={ForgotPasswordScreen}
+              options={{ headerShown: false }}
+            />
+
+            <Stack.Screen
               name="SettingsScreen"
               component={SettingsScreen}
               options={{ headerShown: false }}

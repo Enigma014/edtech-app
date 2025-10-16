@@ -34,9 +34,9 @@ interface UserItem {
   uid?: string;
 }
 
-const Chat = ({ navigation }: { navigation: any }) => {
+const ChatScreen = ({ navigation }: { navigation: any }) => {
   const [chats, setChats] = useState<ChatItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -753,4 +753,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Chat;
+export default ChatScreen;

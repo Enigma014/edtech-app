@@ -23,46 +23,60 @@ const LoginScreen = ({ navigation }: Props) => {
   const _onLoginPressed = async () => {
     const emailError = emailValidator(email.value);
     const passwordError = passwordValidator(password.value);
-
+  
     if (emailError || passwordError) {
       setEmail({ ...email, error: emailError });
       setPassword({ ...password, error: passwordError });
       return;
     }
-
+  
     setLoading(true);
-
+  
     try {
       console.log('Attempting Firebase login...');
-
+  
       // ✅ Sign in with Firebase Auth
       const userCredential = await authService.signInWithEmailAndPassword(
         email.value.trim(),
         password.value
       );
-
+  
       const user = userCredential.user;
-      console.log('Firebase login success:', user.uid);
-
-      // ✅ Update Firestore user profile (optional but good practice)
-      // await db.collection('users').doc(user.uid).set(
-      //   {
-      //     uid: user.uid,
-      //     email: user.email,
-      //     displayName: user.displayName || email.value.split('@')[0],
-      //     photoURL: user.photoURL || '',
-      //     lastLogin: new Date(),
-      //   },
-      //   { merge: true }
-      // );
-
-      console.log('Firestore user updated');
+      await user.reload(); // refresh user state
+  
+      // ⚠️ Check if email is verified
+      if (!user.emailVerified) {
+        setLoading(false);
+        Alert.alert(
+          'Email Not Verified',
+          'Your email is not verified yet. Please check your inbox.',
+          [
+            {
+              text: 'Resend Email',
+              onPress: async () => {
+                try {
+                  await user.sendEmailVerification();
+                  Alert.alert('Sent', 'Verification email has been resent.');
+                } catch (err: any) {
+                  console.error(err);
+                  Alert.alert('Error', err.message || 'Failed to resend email.');
+                }
+              },
+            },
+            { text: 'OK', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+  
+      // ✅ Email verified, allow login
       setLoading(false);
       navigation.navigate('ChatScreen');
+  
     } catch (error: any) {
       setLoading(false);
       console.error('Login error:', error);
-
+  
       let errorMessage = 'Login failed. Please try again.';
       switch (error.code) {
         case 'auth/user-not-found':
@@ -81,10 +95,11 @@ const LoginScreen = ({ navigation }: Props) => {
           errorMessage = 'Too many login attempts. Please try again later.';
           break;
       }
-
+  
       Alert.alert('Error', errorMessage);
     }
   };
+
 
   return (
     <Background>
