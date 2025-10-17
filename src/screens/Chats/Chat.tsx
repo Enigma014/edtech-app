@@ -1,224 +1,94 @@
-import React, { useEffect, useState, useRef } from "react"; 
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  FlatList, 
-  TouchableOpacity, 
-  ActivityIndicator, 
+import React, { useEffect, useState, useRef, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
   Modal,
-  TouchableWithoutFeedback, 
+  TouchableWithoutFeedback,
   Alert,
   Animated,
-} from "react-native"; 
-import firestore from "@react-native-firebase/firestore"; 
-import Icon from "react-native-vector-icons/MaterialCommunityIcons"; 
-import Navbar from "../../components/Navbar"; 
-import SearchBox from "../../components/SearchBox"; 
-import { theme } from "../../core/theme"; 
-import auth from "@react-native-firebase/auth"; 
-import { Swipeable } from "react-native-gesture-handler"; // 🆕 ADD THIS IMPORT
+} from "react-native";
+import firestore from "@react-native-firebase/firestore";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import Navbar from "../../components/Navbar";
+import SearchBox from "../../components/SearchBox";
+import { theme } from "../../core/theme";
+import auth from "@react-native-firebase/auth";
+import { Swipeable } from "react-native-gesture-handler";
+// at top of Chat.tsx (or where your Chat component file is)
+import {
+  subscribeToGroups,
+  subscribeToChatSummaries,
+} from "../../utils/firebase/Chat";
 
-interface ChatItem {
+
+type ChatItemType = {
   id: string;
   name: string;
   lastMessage: string;
-  updatedAt: string;
+  updatedAt: string; // ISO string for stable sorting
   isGroup?: boolean;
-}
+  isCommunity?: boolean;
+  otherUserId?: string;
+};
 
-interface UserItem {
+type UserItem = {
   id: string;
   name: string;
   email: string;
-}
+};
 
 const Chat = ({ navigation }: { navigation: any }) => {
-  const [chats, setChats] = useState<ChatItem[]>([]);
+  const [chats, setChats] = useState<ChatItemType[]>([]);
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-  const swipeableRefs = useRef(new Map()); // 🆕 Track swipeable refs
 
-  useEffect(() => {
-    const currentUser = auth().currentUser;
-    if (!currentUser) {
-      setLoading(false);
-      return;
-    }
+  // Map of chatId -> Swipeable ref
+  const swipeableRefs = useRef<Map<string, any>>(new Map());
 
-    const currentUid = currentUser.uid;
-    setLoading(true);
-    setInitialLoadComplete(false);
-
-    let loadedListeners = 0;
-    const totalListeners = 3; // users, groups, chats
-
-    const checkAllLoaded = () => {
-      loadedListeners++;
-      if (loadedListeners >= totalListeners && !initialLoadComplete) {
-        setLoading(false);
-        setInitialLoadComplete(true);
-      }
-    };
-
-    // ✅ Users listener
-    const unsubscribeUsers = firestore()
-      .collection("users")
-      .onSnapshot((snapshot) => {
-        const userList = snapshot.docs
-          .map((doc) => {
-            const data = doc.data();
-            return data.uid !== currentUid ? {
-              id: data.uid,
-              name: data.name || "Unnamed",
-              lastMessage: data.lastMessage || "",
-              updatedAt: data.lastMessageTime ? data.lastMessageTime.toDate().toLocaleTimeString() : "",
-              isGroup: false,
-            } : null;
-          })
-          .filter(Boolean);
-        setChats((prev) => mergeChats(prev, userList));
-        checkAllLoaded();
-      }, (error) => {
-        console.error("Users listener error:", error);
-        checkAllLoaded();
-      });
-
-    // ✅ Groups listener
-    const unsubscribeGroups = firestore()
-      .collection("groups")
-      .where("members", "array-contains", currentUid)
-      .onSnapshot((snapshot) => {
-        const groupData = snapshot.docs.map((doc) => {
-          const data = doc.data() || {};
-          if (data.isCommunityGroup === true) {
-            return null; // Skip community groups
-          }
-          return {
-            id: doc.id,
-            name: data.name || "Unnamed Group",
-            lastMessage: data.lastMessage || "",
-            updatedAt: data.lastMessageTime ? data.lastMessageTime.toDate().toLocaleTimeString() : data.createdAt ? data.createdAt.toDate().toLocaleTimeString() : "",
-            isGroup: true,
-          };
-        }).filter(Boolean);
-        setChats((prev) => mergeChats(prev, groupData));
-        checkAllLoaded();
-      }, (error) => {
-        console.error("Groups listener error:", error);
-        checkAllLoaded();
-      });
-
-    // ✅ Chats listener (DMs)
-    const unsubscribeChats = firestore()
-      .collection("chats")
-      .where("participants", "array-contains", currentUid)
-      .orderBy("updatedAt", "desc")
-      .onSnapshot(async (snapshot) => {
-        if (!snapshot) {
-          checkAllLoaded();
-          return;
-        }
-        
-        try {
-          const chatData = await Promise.all(
-            snapshot.docs.map(async (doc) => {
-              const data = doc.data() || {};
-              const participants = Array.isArray(data.participants) ? data.participants : [];
-              const otherUserId = participants.find((uid) => uid !== currentUid);
-              
-              let chatName = "Unknown";
-              if (otherUserId) {
-                try {
-                  const userDoc = await firestore()
-                    .collection("users")
-                    .doc(otherUserId)
-                    .get();
-                  const userInfo = userDoc.data();
-                  chatName = userInfo?.displayName || userInfo?.name || userInfo?.email || "Unknown";
-                } catch (err) {
-                  chatName = "Error Loading";
-                }
-              } else {
-                chatName = "Me";
-              }
-
-              return {
-                id: doc.id,
-                name: data.contactName || "Unknown Contact",
-                lastMessage: data.lastMessage || "",
-                updatedAt: data.lastMessageTime ? data.lastMessageTime.toDate().toLocaleTimeString() : data.createdAt ? data.createdAt.toDate().toLocaleTimeString() : "",
-                isGroup: false,
-              };
-            })
-          );
-
-          setChats((prev) => mergeChats(prev, chatData));
-        } catch (error) {
-          console.error("Chats processing error:", error);
-        } finally {
-          checkAllLoaded();
-        }
-      }, (error) => {
-        console.error("Chats listener error:", error);
-        checkAllLoaded();
-      });
-
-    const timeoutId = setTimeout(() => {
-      if (!initialLoadComplete) {
-        console.log("Loading timeout reached");
-        setLoading(false);
-        setInitialLoadComplete(true);
-      }
-    }, 10000);
-
-    return () => {
-      clearTimeout(timeoutId);
-      unsubscribeChats();
-      unsubscribeGroups();
-      unsubscribeUsers();
-    };
-  }, []);
-
-  // ✅ Fixed mergeChats function
-  function mergeChats(prevChats, newChats) {
-    const map = new Map();
-    
-    const validPrevChats = prevChats.filter(chat => chat && chat.id);
-    const validNewChats = newChats.filter(chat => chat && chat.id);
-
-    [...validPrevChats, ...validNewChats].forEach((chat) => {
-      if (chat && chat.id) {
-        map.set(chat.id, chat);
-      }
-    });
-
-    const merged = Array.from(map.values());
-    return merged.sort((a, b) => {
-      const aTime = new Date(a.updatedAt).getTime() || 0;
-      const bTime = new Date(b.updatedAt).getTime() || 0;
-      return bTime - aTime;
-    });
+useEffect(() => {
+  const currentUser = auth().currentUser;
+  if (!currentUser) {
+    setLoading(false);
+    return;
   }
 
-  // ✅ Delete chat function
-  const deleteChat = async (chatId: string, isGroup: boolean) => {
-    if (isGroup) {
-      Alert.alert("Cannot Delete", "Group chats cannot be deleted");
-      return;
-    }
+  const currentUid = currentUser.uid;
 
-    Alert.alert(
-      "Delete Chat",
-      "Are you sure you want to delete this chat? This action cannot be undone.",
-      [
-        {
-          text: "Cancel",
-          style: "cancel"
-        },
+  // Subscribe to personal chat summaries (1:1)
+  const unsubPersonal = subscribeToChatSummaries(currentUid, (personalChats) => {
+    // Subscribe to groups and merge
+    const unsubGroups = subscribeToGroups(currentUid, (groupsList) => {
+      const merged = [...personalChats, ...groupsList];
+      const sortedMerged = merged.sort(
+        (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)
+      );
+      setChats(sortedMerged);
+      setLoading(false);
+    });
+  });
+
+  return () => {
+    unsubPersonal?.();
+  };
+}, []);
+
+  // Delete chat (only for personal chats)
+  const deleteChat = useCallback(
+    async (chatId: string, isGroup: boolean) => {
+      if (isGroup) {
+        Alert.alert("Cannot Delete", "Group chats cannot be deleted");
+        return;
+      }
+
+      Alert.alert("Delete Chat", "Are you sure you want to delete this chat? This action cannot be undone.", [
+        { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           style: "destructive",
@@ -227,49 +97,52 @@ const Chat = ({ navigation }: { navigation: any }) => {
               const currentUser = auth().currentUser;
               if (!currentUser) return;
 
-              // Close the swipeable
+              // Close the swipeable if open
               const ref = swipeableRefs.current.get(chatId);
-              if (ref) ref.close();
+              if (ref && typeof ref.close === "function") {
+                ref.close();
+              }
 
-              // Delete from Firestore chats collection
-              await firestore().collection("chats").doc(chatId).delete();
-              
-              // Also remove from local state
-              setChats(prevChats => prevChats.filter(chat => chat.id !== chatId));
-              
+              // Delete summary and chat document(s) if needed - BE CAREFUL:
+              // Here we delete the chatSummaries doc. If you have other cascade requirements, handle them server-side or add extra deletes.
+              await firestore().collection("chatSummaries").doc(chatId).delete();
+
+              // Optionally delete the chat doc (if you keep a separate chats collection)
+              // await firestore().collection("chats").doc(chatId).delete().catch(()=>{});
+
+              setChats((prevChats) => prevChats.filter((chat) => chat.id !== chatId));
               console.log("✅ Chat deleted successfully");
             } catch (error) {
               console.error("❌ Error deleting chat:", error);
               Alert.alert("Error", "Failed to delete chat");
             }
-          }
-        }
-      ]
-    );
-  };
+          },
+        },
+      ]);
+    },
+    []
+  );
 
-  // ✅ Render right actions for swipe (Delete button)
-  const renderRightActions = (progress: any, dragX: any, item: ChatItem) => {
-    if (item.isGroup) return null; // No swipe for groups
+  // Render right actions for swipe
+  const renderRightActions = (progress: any, dragX: any, item: ChatItemType) => {
+    if (item.isGroup) return null; // don't show delete for groups
 
-    const trans = dragX.interpolate({
-      inputRange: [0, 50, 100, 101],
-      outputRange: [0, 0, 0, 1],
-    });
+    // Defensive interpolation
+    let trans: any = 0;
+    try {
+      if (dragX && typeof dragX.interpolate === "function") {
+        trans = dragX.interpolate({
+          inputRange: [0, 50, 100, 101],
+          outputRange: [0, 0, 0, 1],
+        });
+      }
+    } catch (e) {
+      trans = 0;
+    }
 
     return (
-      <TouchableOpacity 
-        style={styles.deleteButton}
-        onPress={() => deleteChat(item.id, false)}
-      >
-        <Animated.View
-          style={[
-            styles.deleteButtonContent,
-            {
-              transform: [{ translateX: trans }],
-            },
-          ]}
-        >
+      <TouchableOpacity style={styles.deleteButton} onPress={() => deleteChat(item.id, false)}>
+        <Animated.View style={[styles.deleteButtonContent, { transform: [{ translateX: trans as any }] }]}>
           <Icon name="delete" size={24} color="#fff" />
           <Text style={styles.deleteButtonText}>Delete</Text>
         </Animated.View>
@@ -277,74 +150,75 @@ const Chat = ({ navigation }: { navigation: any }) => {
     );
   };
 
-  // ✅ Simple Chat Item Component
-  const ChatItem = ({ item }: { item: ChatItem }) => (
-    <Swipeable
-      ref={(ref) => {
-        if (ref) {
-          swipeableRefs.current.set(item.id, ref);
-        } else {
-          swipeableRefs.current.delete(item.id);
-        }
-      }}
-      renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
-      enabled={!item.isGroup} // Disable swipe for groups
-      rightThreshold={40}
-      onSwipeableRightOpen={() => {
-        // Close other open swipeables
-        swipeableRefs.current.forEach((ref, chatId) => {
-          if (chatId !== item.id && ref) {
-            ref.close();
+  // Chat row component
+  const ChatListItem = ({ item }: { item: ChatItemType }) => {
+    const displayTime = (() => {
+      try {
+        const d = new Date(item.updatedAt);
+        if (isNaN(d.getTime())) return item.updatedAt || "";
+        return d.toLocaleString();
+      } catch {
+        return item.updatedAt || "";
+      }
+    })();
+
+    return (
+      <Swipeable
+        ref={(ref) => {
+          if (ref) {
+            swipeableRefs.current.set(item.id, ref);
+          } else {
+            swipeableRefs.current.delete(item.id);
           }
-        });
-      }}
-    >
-      <TouchableOpacity 
-        onPress={() => {
-          navigation.navigate("ChatDetailScreen", {
-            chatId: item.id,
-            name: item.name,
-            isGroup: item.isGroup || false,
-            contactId: item.isGroup ? undefined : item.id,
+        }}
+        renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
+        enabled={!item.isGroup}
+        rightThreshold={40}
+        onSwipeableRightOpen={() => {
+          // Close any other open swipeables
+          swipeableRefs.current.forEach((ref, chatId) => {
+            if (chatId !== item.id && ref && typeof ref.close === "function") {
+              ref.close();
+            }
           });
         }}
-        style={styles.chatRow}
-        activeOpacity={0.7}
       >
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {item.name.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-        <View style={styles.chatContent}>
-          <Text style={styles.chatName}>{item.name}</Text>
-          <Text style={styles.chatMessage} numberOfLines={1}>
-            {item.lastMessage}
-          </Text>
-        </View>
-        <Text style={styles.chatTime}>{item.updatedAt}</Text>
-        
-        {/* Swipe hint for personal chats */}
-        {!item.isGroup && (
-          <Icon 
-            name="chevron-left" 
-            size={20} 
-            color="#ccc" 
-            style={styles.swipeHint}
-          />
-        )}
-      </TouchableOpacity>
-    </Swipeable>
-  );
+        <TouchableOpacity
+          onPress={() =>
+            navigation.navigate("ChatDetailScreen", {
+              chatId: item.id,
+              name: item.name,
+              isGroup: item.isGroup || false,
+              contactId: item.isGroup ? undefined : item.id,
+              otherUserId: item.otherUserId || undefined,
+            })
 
-  // ✅ Navigate to ListUsers screen
+          }
+          style={styles.chatRow}
+          activeOpacity={0.7}
+        >
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{item.name?.charAt(0)?.toUpperCase()}</Text>
+          </View>
+          <View style={styles.chatContent}>
+            <Text style={styles.chatName}>{item.name}</Text>
+            <Text style={styles.chatMessage} numberOfLines={1}>
+              {item.lastMessage}
+            </Text>
+          </View>
+          <Text style={styles.chatTime}>{displayTime}</Text>
+
+          {!item.isGroup && <Icon name="chevron-left" size={20} color="#ccc" style={styles.swipeHint} />}
+        </TouchableOpacity>
+      </Swipeable>
+    );
+  };
+
   const navigateToUserList = () => {
     navigation.navigate("ListUsers");
   };
 
-  const renderChatItem = ({ item }: { item: ChatItem }) => (
-    <ChatItem item={item} />
-  );
+  const renderChatItem = ({ item }: { item: ChatItemType }) => <ChatListItem item={item} />;
 
   if (loading) {
     return (
@@ -357,24 +231,19 @@ const Chat = ({ navigation }: { navigation: any }) => {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      {/* Header with section title + menu */}
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Text style={styles.sectionTitle}>Chats</Text>
-        <TouchableOpacity 
-          style={{ padding: 10, marginRight: 10, marginTop: 8 }}
-          onPress={() => setShowMenu(!showMenu)}
-        >
+        <TouchableOpacity style={{ padding: 10, marginRight: 10, marginTop: 8 }} onPress={() => setShowMenu(!showMenu)}>
           <Icon name="dots-vertical" size={28} color="gray" />
         </TouchableOpacity>
       </View>
 
-      {/* Menu popover with outside click handling */}
       {showMenu && (
         <TouchableWithoutFeedback onPress={() => setShowMenu(false)}>
           <View style={styles.menuOverlay}>
             <TouchableWithoutFeedback>
               <View style={styles.menuPopover}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.menuItem}
                   onPress={() => {
                     setShowMenu(false);
@@ -386,10 +255,7 @@ const Chat = ({ navigation }: { navigation: any }) => {
                 >
                   <Text>Create Group</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.menuItem}
-                  onPress={() => console.log("Create Community")}
-                >
+                <TouchableOpacity style={styles.menuItem} onPress={() => console.log("Create Community")}>
                   <Text>Create Community</Text>
                 </TouchableOpacity>
               </View>
@@ -413,11 +279,7 @@ const Chat = ({ navigation }: { navigation: any }) => {
         }
       />
 
-      {/* Floating + Button */}
-      <TouchableOpacity 
-        style={styles.fab} 
-        onPress={navigateToUserList}
-      >
+      <TouchableOpacity style={styles.fab} onPress={navigateToUserList}>
         <Icon name="plus" size={28} color="#fff" />
       </TouchableOpacity>
 
@@ -456,7 +318,7 @@ const styles = StyleSheet.create({
   loader: {
     flex: 1,
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
   },
   loadingText: {
     marginTop: 10,
@@ -469,7 +331,7 @@ const styles = StyleSheet.create({
     marginLeft: 20,
     marginTop: 40,
     marginBottom: 15,
-    color: "#25d366"
+    color: "#25d366",
   },
   chatRow: {
     flexDirection: "row",
@@ -482,7 +344,7 @@ const styles = StyleSheet.create({
   },
   chatTime: {
     fontSize: 12,
-    color: "#999"
+    color: "#999",
   },
   fab: {
     position: "absolute",
@@ -521,7 +383,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   menuItem: {
-    padding: 12
+    padding: 12,
   },
   emptyContainer: {
     alignItems: "center",
@@ -545,7 +407,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     width: 80,
-    height: '100%',
+    height: "100%",
   },
   deleteButtonContent: {
     alignItems: "center",

@@ -70,7 +70,9 @@ export default function ListUsers({ navigation }) {
           name: user.name || "Unknown",
           contactId: user.id,
           isGroup: false,
-          receiverId: user.id, // Add receiverId for message sending
+          other: user.id,
+          otherUserId: user.id,
+          
         });
       } else {
         // Create new private chat
@@ -88,7 +90,8 @@ export default function ListUsers({ navigation }) {
           name: user.name || "Unknown",
           contactId: user.id,
           isGroup: false,
-          receiverId: user.id, // Add receiverId for message sending
+          receiverId: user.id,
+          otherUserId: user.id,
         });
       }
     } catch (error) {

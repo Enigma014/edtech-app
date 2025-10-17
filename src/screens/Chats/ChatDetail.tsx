@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -26,8 +26,7 @@ import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
 
 const ChatDetailScreen = ({ route, navigation }: any) => {
-  const { chatId: initialChatId, name, receiverId, isGroup, contactId, isCommunity, communityId } = route.params;
-  const currentUserId = auth().currentUser?.uid;
+  const { chatId: initialChatId, name, receiverId, isGroup, contactId, isCommunity, communityId, otherUserId: otherUserId } = route.params;
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
@@ -38,23 +37,32 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
   const [groupData, setGroupData] = useState<any>(null);
   const flatListRef = useRef<FlatList>(null);
 
-  const chatId = initialChatId || generateChatId(currentUserId, receiverId);
+  // generateChatId can throw if currentUserId is undefined, so guard it
+  const currentUserId = auth().currentUser?.uid;
 
-  // ✅ Fetch contact/group data
+  if (!currentUserId) {
+    console.warn("Auth not ready yet");
+    return null;
+  }
+
+  const actualReceiverId = isGroup ? initialChatId : receiverId || contactId;
+
+  if (!actualReceiverId) {
+    console.warn("Cannot determine chat ID for this chat");
+    return null;
+  }
+
+  const chatId = isGroup ? initialChatId : receiverId || contactId;
+
+  // Fetch contact/group data
   useEffect(() => {
     const fetchData = async () => {
-      if (name) return; // If name is already provided, use it
-
+      if (name) return;
       try {
         if (isGroup) {
-          // Fetch group data
-          console.log("Fetching group data for:", chatId);
-          const groupDoc = await firestore()
-            .collection('groups')
-            .doc(chatId)
-            .get();
+          const groupDoc = await firestore().collection("groups").doc(chatId).get();
 
-          if (groupDoc.exists) {
+          if (groupDoc.exists()) {
             const data = groupDoc.data();
             setGroupData(data);
             setContactName(data?.name || "Unknown Group");
@@ -63,21 +71,16 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
             setContactName("Unknown Group");
           }
         } else {
-          // Fetch contact data for individual chat
           let contactToFetch = contactId || receiverId;
-          
+
           if (!contactToFetch) {
             console.log("No contact ID available");
             return;
           }
 
-          console.log("Fetching contact data for:", contactToFetch);
-          const contactDoc = await firestore()
-            .collection('users')
-            .doc(contactToFetch)
-            .get();
+          const contactDoc = await firestore().collection("users").doc(contactToFetch).get();
 
-          if (contactDoc.exists) {
+          if (contactDoc.exists()) {
             const data = contactDoc.data();
             setContactName(data?.name || "Unknown");
             setContactData(data);
@@ -95,7 +98,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     fetchData();
   }, [name, contactId, receiverId, isGroup, chatId]);
 
-  // ✅ Listen to real-time chat messages
+  // Listen to real-time chat messages
   useEffect(() => {
     if (!chatId) return;
     const unsubscribe = listenMessages(chatId, (msgs: any[], lastDoc: any) => {
@@ -105,23 +108,24 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     return () => unsubscribe && unsubscribe();
   }, [chatId]);
 
-  // ✅ Mark messages as read on entering chat
+  // Mark messages as read on entering chat
   useEffect(() => {
     if (chatId && currentUserId) {
       markMessagesAsRead(chatId, currentUserId);
     }
   }, [chatId, currentUserId]);
 
-  // ✅ Send message
+  // Send message
   const handleSend = async () => {
     if (!message.trim() || !currentUserId) return;
-    
-    // Determine the actual receiver ID
+
     const actualReceiverId = isGroup ? chatId : (receiverId || contactId);
     if (!actualReceiverId) {
       Alert.alert("Error", "Cannot send message: receiver not specified");
       return;
     }
+
+    const chatType = isGroup ? "group" : "chat";
 
     const optimisticMsg = {
       id: `temp-${Date.now()}`,
@@ -130,21 +134,27 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
       receiverId: actualReceiverId,
       createdAt: new Date(),
       isOptimistic: true,
+      chatType,
     };
+    // show optimistic on LEFT (we'll render based on sender)
     setMessages((prev) => [...prev, optimisticMsg]);
+    const messageToSend = message;
     setMessage("");
-
+    console.log("Sending message:", currentUserId, "to", otherUserId, isGroup);
     try {
-      await sendMessage(chatId, currentUserId, actualReceiverId, message, null);
+      const chatId = isGroup 
+      ? initialChatId
+      : generateChatId(currentUserId, otherUserId);
+      await sendMessage(chatId, currentUserId, otherUserId, messageToSend, undefined, null, chatType);
+      // listenMessages will pick up server-saved message and replace optimistic entry
     } catch (error) {
       console.error("Error sending message:", error);
-      // Remove optimistic message on error
-      setMessages((prev) => prev.filter(m => m.id !== optimisticMsg.id));
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
       Alert.alert("Error", "Failed to send message");
     }
   };
 
-  // ✅ Load more messages (pagination)
+  // Load more messages (pagination)
   const handleLoadMore = async () => {
     if (!chatId || !lastDoc) return;
     const { messages: newMessages, lastDoc: newLastDoc } = await loadMoreMessages(chatId, lastDoc);
@@ -152,8 +162,13 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     setLastDoc(newLastDoc);
   };
 
-  // ✅ Delete single message
-  const handleDeleteMessage = (messageId: string) => {
+  // Delete single message (only own messages)
+  const handleDeleteMessage = (messageObj: any) => {
+    if (messageObj.senderId !== currentUserId) {
+      Alert.alert("Cannot delete", "You can only delete your own messages");
+      return;
+    }
+
     Alert.alert("Delete Message", "Are you sure you want to delete this message?", [
       { text: "Cancel", style: "cancel" },
       {
@@ -161,8 +176,8 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
         style: "destructive",
         onPress: async () => {
           try {
-            await deleteMessage(chatId, messageId);
-            setMessages((prev) => prev.filter((m) => m.id !== messageId));
+            await deleteMessage(chatId, messageObj.id);
+            setMessages((prev) => prev.filter((m) => m.id !== messageObj.id));
           } catch (error) {
             console.error("Error deleting message:", error);
             Alert.alert("Error", "Failed to delete message");
@@ -172,7 +187,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     ]);
   };
 
-  // ✅ Clear all messages
+  // Clear all messages
   const handleClearChat = () => {
     Alert.alert("Clear Chat", "This will delete all messages in the chat.", [
       { text: "Cancel", style: "cancel" },
@@ -181,7 +196,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
         style: "destructive",
         onPress: async () => {
           try {
-            await deleteAllMessages(chatId, currentUserId);
+            await deleteAllMessages(chatId, auth().currentUser?.uid || "");
             setMessages([]);
             setMenuVisible(false);
           } catch (error) {
@@ -193,25 +208,22 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     ]);
   };
 
-  // ✅ Open contact or group info
+  // View info
   const handleViewInfo = () => {
     setMenuVisible(false);
-    
     if (isGroup) {
-      console.log("Navigating to GroupInfoScreen with groupId:", chatId);
-      navigation.navigate("GroupInfoScreen", { 
+      navigation.navigate("GroupInfoScreen", {
         groupId: chatId,
         groupName: contactName,
         isCommunity: isCommunity || false,
-        communityId: communityId || null
+        communityId: communityId || null,
       });
     } else {
-      // Navigate to ContactProfileScreen with the correct contact ID
       const actualContactId = contactId || receiverId;
       if (actualContactId) {
-        navigation.navigate("ContactProfileScreen", { 
+        navigation.navigate("ContactProfileScreen", {
           contactId: actualContactId,
-          contactName: contactName 
+          contactName: contactName,
         });
       } else {
         Alert.alert("Error", "Contact information not available");
@@ -219,22 +231,19 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     }
   };
 
-  // ✅ Navigate to contact profile when tapping the name
   const handleNamePress = () => {
     if (isGroup) {
-      console.log("Tapping group name, navigating to GroupInfoScreen with groupId:", chatId);
-      navigation.navigate("GroupInfoScreen", { 
+      navigation.navigate("GroupInfoScreen", {
         groupId: chatId,
         groupName: contactName,
         isCommunity: isCommunity || false,
-        communityId: communityId || null
+        communityId: communityId || null,
       });
     } else {
-      // For individual chats, show contact profile
       const actualContactId = contactId || receiverId;
       if (actualContactId) {
-        navigation.navigate("ContactProfileScreen", { 
-          contactId: actualContactId 
+        navigation.navigate("ContactProfileScreen", {
+          contactId: actualContactId,
         });
       } else {
         Alert.alert("Error", "Contact information not available");
@@ -242,24 +251,27 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     }
   };
 
-  // ✅ Render message
+  // Render message — **SENT messages on LEFT**, RECEIVED messages on RIGHT
   const renderItem = ({ item }: any) => {
-    const isMyMessage = item.senderId === currentUserId;
+    const isSentByMe = item.senderId === currentUserId;
+    // We want messages *I* send to appear on LEFT
+    const isMyMessageOnLeft = !isSentByMe;
     return (
       <TouchableOpacity
-        onLongPress={() => handleDeleteMessage(item.id)}
+        onLongPress={() => handleDeleteMessage(item)}
         activeOpacity={0.7}
       >
         <View
           style={[
             styles.messageRow,
-            isMyMessage ? styles.myMessageRow : styles.theirMessageRow,
+            isMyMessageOnLeft ? styles.myMessageRowLeft : styles.theirMessageRowRight,
           ]}
         >
           <View
             style={[
               styles.messageBubble,
-              isMyMessage ? styles.myMessage : styles.theirMessage,
+              isMyMessageOnLeft ? styles.myMessageLeft : styles.theirMessageRight,
+              { alignSelf: isMyMessageOnLeft ? "flex-start" : "flex-end" },
             ]}
           >
             <Text style={styles.messageText}>{item.text}</Text>
@@ -270,12 +282,14 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
   };
 
   return (
+    <SafeAreaView style={styles.safeContainer}>
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={styles.container}
+    behavior={Platform.OS === "ios" ? "padding" : "height"}
+    keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       <SafeAreaView style={styles.container}>
-        {/* ✅ Header */}
+        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -295,7 +309,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
           </TouchableOpacity>
         </View>
 
-        {/* ✅ Chat Messages */}
+        {/* Chat Messages */}
         <FlatList
           ref={flatListRef}
           data={messages}
@@ -313,7 +327,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
           }
         />
 
-        {/* ✅ Input Bar */}
+        {/* Input Bar */}
         <View style={styles.bottomWrapper}>
           <View style={styles.inputWrapper}>
             <Icon name="emoticon-outline" size={24} color="gray" style={styles.iconLeft} />
@@ -329,8 +343,8 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
             <Icon name="camera-outline" size={22} color="gray" style={styles.iconRight} />
           </View>
 
-          <TouchableOpacity 
-            style={[styles.micButton, !message.trim() && styles.micButtonDisabled]} 
+          <TouchableOpacity
+            style={[styles.micButton, !message.trim() && styles.micButtonDisabled]}
             onPress={handleSend}
             disabled={!message.trim()}
           >
@@ -338,7 +352,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
           </TouchableOpacity>
         </View>
 
-        {/* ✅ Options Menu */}
+        {/* Options Menu */}
         <Modal
           transparent
           visible={menuVisible}
@@ -364,13 +378,18 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
         </Modal>
       </SafeAreaView>
     </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 export default ChatDetailScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#ECE5DD" },
+   safeContainer: {
+    flex: 1,
+    backgroundColor: "#ECE5DD",
+  },
+  container: { flex: 1, backgroundColor: "#ECE5DD",justifyContent: "flex-end" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -378,23 +397,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     paddingVertical: 15,
     paddingHorizontal: 15,
+    paddingTop: 40,
     elevation: 2,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 1,
   },
-  headerLeft: { 
-    flexDirection: "row", 
+  headerLeft: {
+    flexDirection: "row",
     alignItems: "center",
     flex: 1,
   },
   nameContainer: {
     marginLeft: 10,
   },
-  contactName: { 
-    fontSize: 18, 
-    fontWeight: "600", 
+  contactName: {
+    fontSize: 18,
+    fontWeight: "600",
     color: "#000",
   },
   statusText: {
@@ -402,8 +422,8 @@ const styles = StyleSheet.create({
     color: "#666",
     marginTop: 2,
   },
-  chatContainer: { 
-    padding: 10, 
+  chatContainer: {
+    padding: 10,
     flexGrow: 1,
   },
   emptyContainer: {
@@ -422,34 +442,38 @@ const styles = StyleSheet.create({
     color: "#999",
     textAlign: "center",
   },
-  messageRow: { 
-    flexDirection: "row", 
-    marginVertical: 4, 
-    paddingHorizontal: 8 
+  messageRow: {
+    flexDirection: "row",
+    marginVertical: 4,
+    paddingHorizontal: 8,
   },
-  myMessageRow: { 
-    justifyContent: "flex-end" 
+  // Rows for left/right alignment
+  myMessageRowLeft: {
+    justifyContent: "flex-start",
   },
-  theirMessageRow: { 
-    justifyContent: "flex-start" 
+  theirMessageRowRight: {
+    justifyContent: "flex-end",
   },
-  messageBubble: { 
-    padding: 12, 
-    borderRadius: 8, 
-    maxWidth: "80%" 
+  messageBubble: {
+    padding: 12,
+    borderRadius: 8,
+    maxWidth: "80%",
   },
-  myMessage: { 
-    backgroundColor: "#dcf8c6", 
-    borderTopRightRadius: 0 
+  // Sent by me (now appearing on LEFT)
+  myMessageLeft: {
+    backgroundColor: "#fff",
+    borderTopRightRadius: 0,// "tail" shape to the left
   },
-  theirMessage: { 
-    backgroundColor: "#fff", 
-    borderTopLeftRadius: 0 
+  // Received from other (now appearing on RIGHT)
+  theirMessageRight: {
+     // "tail" shape to the right
+    backgroundColor: "#dcf8c6",
+    borderTopLeftRadius: 0, 
   },
-  messageText: { 
-    color: "#000", 
-    fontSize: 16, 
-    lineHeight: 20 
+  messageText: {
+    color: "#000",
+    fontSize: 16,
+    lineHeight: 20,
   },
   bottomWrapper: {
     flexDirection: "row",
@@ -470,18 +494,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     maxHeight: 100,
   },
-  textInput: { 
-    flex: 1, 
-    fontSize: 16, 
-    color: "#000", 
+  textInput: {
+    flex: 1,
+    fontSize: 16,
+    color: "#000",
     paddingVertical: 4,
     maxHeight: 80,
   },
-  iconLeft: { 
-    marginRight: 8 
+  iconLeft: {
+    marginRight: 8,
   },
-  iconRight: { 
-    marginLeft: 8 
+  iconRight: {
+    marginLeft: 8,
   },
   micButton: {
     backgroundColor: "#25D366",
@@ -514,12 +538,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 4,
   },
-  menuItem: { 
-    paddingVertical: 12, 
-    paddingHorizontal: 16 
+  menuItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
-  menuText: { 
-    fontSize: 16, 
-    color: "#000" 
+  menuText: {
+    fontSize: 16,
+    color: "#000",
   },
 });
