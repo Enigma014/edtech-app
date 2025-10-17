@@ -1,9 +1,11 @@
 // ContactProfileScreen.js
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
-import { authService, db } from '../../utils/firebaseConfig'; // Import from your services file
+import { authService, db } from '../../utils/firebaseConfig';
 import firestore from "@react-native-firebase/firestore";
-export default function ContactProfileScreen({ route }) {
+import auth from "@react-native-firebase/auth";
+
+export default function ContactProfileScreen({ route, navigation }) {
   const { contactId } = route.params;
   const [contact, setContact] = useState(null);
   const [isBlocked, setIsBlocked] = useState(false);
@@ -13,19 +15,15 @@ export default function ContactProfileScreen({ route }) {
   useEffect(() => {
     console.log("ContactProfileScreen mounted with contactId:", contactId);
     
-    // Use the authService from your firebaseServices
-    const unsubscribe = authService.onAuthStateChanged((user) => {
-      console.log("Auth state changed:", user ? "User logged in" : "No user");
-      if (user) {
-        setCurrentUser(user);
-      } else {
-        console.log("No user authenticated");
-        Alert.alert("Error", "Please log in to view profiles");
-        setLoading(false);
-      }
-    });
-
-    return unsubscribe;
+    const currentUser = auth().currentUser;
+    if (currentUser) {
+      setCurrentUser(currentUser);
+      console.log("Current user:", currentUser.uid);
+    } else {
+      console.log("No user authenticated");
+      Alert.alert("Error", "Please log in to view profiles");
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -37,8 +35,8 @@ export default function ContactProfileScreen({ route }) {
       try {
         setLoading(true);
         
-        // Use the db from your firebaseServices
-        const contactDoc = await db.collection('users').doc(contactId).get();
+        // Fetch contact data
+        const contactDoc = await firestore().collection('users').doc(contactId).get();
         console.log("Contact document exists:", contactDoc.exists);
         
         if (contactDoc.exists) {
@@ -50,10 +48,19 @@ export default function ContactProfileScreen({ route }) {
           Alert.alert("Error", "Contact not found");
         }
 
-        // Fetch block status
-        const blockDoc = await db.collection('blocks').doc(`${currentUser.uid}_${contactId}`).get();
-        console.log("Block status exists:", blockDoc.exists);
-        setIsBlocked(blockDoc.exists);
+        // Fetch block status - check both directions
+        const blockDoc1 = await firestore().collection('blocks')
+          .doc(`${currentUser.uid}_${contactId}`)
+          .get();
+        
+        const blockDoc2 = await firestore().collection('blocks')
+          .doc(`${contactId}_${currentUser.uid}`)
+          .get();
+
+        console.log("User blocked contact:", blockDoc1.exists);
+        console.log("Contact blocked user:", blockDoc2.exists);
+        
+        setIsBlocked(blockDoc1.exists); // Only show if current user blocked the contact
       } catch (error) {
         console.error("Error fetching contact:", error);
         Alert.alert("Error", "Failed to load contact information");
@@ -72,25 +79,118 @@ export default function ContactProfileScreen({ route }) {
     }
 
     try {
-      const blockRef = db.collection('blocks').doc(`${currentUser.uid}_${contactId}`);
+      const blockRef = firestore().collection('blocks').doc(`${currentUser.uid}_${contactId}`);
 
       if (isBlocked) {
+        // Unblock
         await blockRef.delete();
         setIsBlocked(false);
         Alert.alert('Unblocked', 'You have unblocked this contact.');
       } else {
+        // Block
         await blockRef.set({
-          blocker: currentUser.uid,
-          blocked: contactId,
+          blockerId: currentUser.uid,
+          blockedId: contactId,
+          blockerName: currentUser.displayName || currentUser.email,
+          blockedName: contact?.name || 'Unknown',
           timestamp: firestore.FieldValue.serverTimestamp(),
         });
         setIsBlocked(true);
-        Alert.alert('Blocked', 'You have blocked this contact.');
+        Alert.alert('Blocked', 'You have blocked this contact. They will no longer be able to message you.');
       }
     } catch (error) {
       console.error("Error toggling block:", error);
       Alert.alert("Error", "Failed to update block status");
     }
+  };
+
+  const reportUser = () => {
+    Alert.alert(
+      "Report User",
+      "Are you sure you want to report this user?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Report", 
+          style: "destructive", 
+          onPress: async () => {
+            try {
+              await firestore().collection('reports').add({
+                reporterId: currentUser.uid,
+                reportedId: contactId,
+                reporterName: currentUser.displayName || currentUser.email,
+                reportedName: contact?.name || 'Unknown',
+                timestamp: firestore.FieldValue.serverTimestamp(),
+              });
+              Alert.alert("Reported", "User has been reported to administrators.");
+            } catch (error) {
+              console.error("Error reporting user:", error);
+              Alert.alert("Error", "Failed to report user");
+            }
+          }
+        },
+      ]
+    );
+  };
+
+  const deleteChat = () => {
+    Alert.alert(
+      "Delete Chat",
+      "Are you sure you want to delete all chat history with this user?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive", 
+          onPress: async () => {
+            try {
+              // Find and delete the chat between users
+              const chatsSnapshot = await firestore()
+                .collection('chats')
+                .where('participants', 'array-contains', currentUser.uid)
+                .get();
+
+              let chatDeleted = false;
+              
+              for (const doc of chatsSnapshot.docs) {
+                const chatData = doc.data();
+                const participants = chatData.participants || [];
+                
+                if (participants.includes(contactId) && participants.length === 2) {
+                  // Delete the chat document
+                  await firestore().collection('chats').doc(doc.id).delete();
+                  
+                  // Also delete all messages in this chat
+                  const messagesSnapshot = await firestore()
+                    .collection('chats')
+                    .doc(doc.id)
+                    .collection('messages')
+                    .get();
+                  
+                  const deletePromises = messagesSnapshot.docs.map(messageDoc => 
+                    messageDoc.ref.delete()
+                  );
+                  
+                  await Promise.all(deletePromises);
+                  chatDeleted = true;
+                  break;
+                }
+              }
+
+              if (chatDeleted) {
+                Alert.alert("Success", "Chat history has been deleted.");
+                navigation.goBack(); // Go back to previous screen
+              } else {
+                Alert.alert("Info", "No chat history found to delete.");
+              }
+            } catch (error) {
+              console.error("Error deleting chat:", error);
+              Alert.alert("Error", "Failed to delete chat history");
+            }
+          }
+        },
+      ]
+    );
   };
 
   if (loading) {
@@ -132,21 +232,6 @@ export default function ContactProfileScreen({ route }) {
         <Text style={styles.email}>{contact.email || ''}</Text>
       </View>
 
-      <View style={styles.buttonRow}>
-        <TouchableOpacity style={styles.actionBtn}>
-          <Text style={styles.actionText}>Audio</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn}>
-          <Text style={styles.actionText}>Video</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn}>
-          <Text style={styles.actionText}>Pay</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionBtn}>
-          <Text style={styles.actionText}>Search</Text>
-        </TouchableOpacity>
-      </View>
-
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Status:</Text>
         <Text style={styles.status}>
@@ -154,39 +239,44 @@ export default function ContactProfileScreen({ route }) {
         </Text>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Media, Links, and Docs</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          {contact.media && contact.media.length > 0 ? (
-            contact.media.map((item, i) => (
-              <Image key={i} source={{ uri: item.url }} style={styles.thumbnail} />
-            ))
-          ) : (
-            <Text style={styles.noMedia}>No media shared</Text>
-          )}
-        </ScrollView>
-      </View>
-
-      <View style={styles.section}>
-        <TouchableOpacity onPress={toggleBlock} style={styles.blockButton}>
-          <Text style={[styles.blockText, { color: isBlocked ? 'red' : 'green' }]}>
+      {/* Action Buttons */}
+      <View style={styles.actionSection}>
+        <TouchableOpacity 
+          onPress={toggleBlock} 
+          style={[styles.actionButton, isBlocked ? styles.unblockButton : styles.blockButton]}
+        >
+          <Text style={[styles.actionButtonText, isBlocked ? styles.unblockButtonText : styles.blockButtonText]}>
             {isBlocked ? 'Unblock Contact' : 'Block Contact'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          onPress={reportUser} 
+          style={[styles.actionButton, styles.reportButton]}
+        >
+          <Text style={[styles.actionButtonText, styles.reportButtonText]}>
+            Report User
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          onPress={deleteChat} 
+          style={[styles.actionButton, styles.deleteButton]}
+        >
+          <Text style={[styles.actionButtonText, styles.deleteButtonText]}>
+            Delete Chat History
           </Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Media visibility: Off</Text>
-      </View>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Encryption: End-to-end</Text>
-      </View>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Disappearing messages: Off</Text>
-      </View>
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Chat lock: Disabled</Text>
-      </View>
+      {/* Block Status Info */}
+      {isBlocked && (
+        <View style={styles.infoSection}>
+          <Text style={styles.infoText}>
+            ⚠️ This contact is blocked. They cannot send you messages.
+          </Text>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -212,7 +302,9 @@ const styles = StyleSheet.create({
   profile: { 
     alignItems: 'center', 
     marginBottom: 20,
-    paddingVertical: 20
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0'
   },
   avatar: { 
     backgroundColor: '#25D366', 
@@ -243,22 +335,6 @@ const styles = StyleSheet.create({
     color: 'gray',
     fontSize: 14
   },
-  buttonRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-around', 
-    marginVertical: 15 
-  },
-  actionBtn: { 
-    padding: 12, 
-    backgroundColor: '#f0f0f0', 
-    borderRadius: 10,
-    minWidth: 60,
-    alignItems: 'center'
-  },
-  actionText: {
-    fontSize: 14,
-    color: '#000'
-  },
   section: { 
     marginVertical: 10, 
     paddingVertical: 12,
@@ -270,30 +346,68 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontWeight: '600',
     color: '#000',
-    marginBottom: 5
+    marginBottom: 5,
+    fontSize: 16
   },
   status: { 
     fontStyle: 'italic', 
     marginTop: 5,
-    color: '#666'
+    color: '#666',
+    fontSize: 14
   },
-  thumbnail: { 
-    width: 80, 
-    height: 80, 
-    marginRight: 10, 
-    borderRadius: 5 
+  actionSection: {
+    marginVertical: 20,
+    paddingHorizontal: 5
   },
-  noMedia: {
-    fontStyle: 'italic',
-    color: 'gray',
-    marginTop: 10
+  actionButton: {
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginVertical: 8,
+    borderWidth: 1
+  },
+  actionButtonText: {
+    fontWeight: '600',
+    fontSize: 16
   },
   blockButton: {
-    padding: 10,
-    alignItems: 'center'
+    backgroundColor: '#fff',
+    borderColor: 'red'
   },
-  blockText: {
-    fontWeight: 'bold',
-    fontSize: 16
+  blockButtonText: {
+    color: 'red'
+  },
+  unblockButton: {
+    backgroundColor: '#f0f0f0',
+    borderColor: '#666'
+  },
+  unblockButtonText: {
+    color: '#666'
+  },
+  reportButton: {
+    backgroundColor: '#fff',
+    borderColor: 'orange'
+  },
+  reportButtonText: {
+    color: 'orange'
+  },
+  deleteButton: {
+    backgroundColor: '#fff',
+    borderColor: '#666'
+  },
+  deleteButtonText: {
+    color: '#666'
+  },
+  infoSection: {
+    backgroundColor: '#fff3cd',
+    padding: 15,
+    borderRadius: 10,
+    marginVertical: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffc107'
+  },
+  infoText: {
+    color: '#856404',
+    fontSize: 14
   }
 });

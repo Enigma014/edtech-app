@@ -35,15 +35,15 @@ export default function SelectMembersScreen() {
   
   const [users, setUsers] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false); // 🆕 ADMIN CHECK
-  const [loading, setLoading] = useState(true); // 🆕 LOADING STATE
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!currentUserId) return;
 
-    // 🆕 CHECK IF USER IS ADMIN OF THE COMMUNITY
-    const checkAdminStatus = async () => {
+    const fetchData = async () => {
       try {
+        // Check admin status for community
         if (communityId) {
           const communityDoc = await firestore()
             .collection("communities")
@@ -63,39 +63,53 @@ export default function SelectMembersScreen() {
           // For regular groups, user is always admin (they're creating it)
           setIsAdmin(true);
         }
+
+        // Fetch users (excluding current user)
+        const unsub = firestore().collection("users").onSnapshot(snapshot => {
+          const allUsers = snapshot.docs.map(doc => ({ 
+            id: doc.id, 
+            ...doc.data() 
+          }));
+          
+          // ✅ FIXED: Filter out current user properly
+          const filteredUsers = allUsers.filter(user => {
+            // Check both id and uid fields to exclude current user
+            const userId = user.id || user.uid;
+            return userId !== currentUserId;
+          });
+          
+          setUsers(filteredUsers);
+        });
+
+        return unsub;
+
       } catch (error) {
-        console.error("Error checking admin status:", error);
-        Alert.alert("Error", "Failed to verify permissions");
+        console.error("Error fetching data:", error);
+        Alert.alert("Error", "Failed to load users");
         navigation.goBack();
       } finally {
         setLoading(false);
       }
     };
 
-    checkAdminStatus();
+    const unsubscribe = fetchData();
 
-    // Only fetch users if user is admin
-    if (isAdmin) {
-      const unsub = firestore().collection("users").onSnapshot(snapshot => {
-        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const filteredUsers = allUsers.filter(user => 
-          user.id !== currentUserId && user.uid !== currentUserId
-        );
-        setUsers(filteredUsers);
-      });
-      return unsub;
-    }
-  }, [currentUserId, communityId, isAdmin]);
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [currentUserId, communityId, navigation]);
 
   const toggleSelect = (uid: string) => {
-    if (!isAdmin) return; // 🆕 PREVENT SELECTION IF NOT ADMIN
+    if (!isAdmin) return;
     setSelected(prev =>
       prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
     );
   };
 
   const handleCreateGroup = () => {
-    if (!isAdmin) { // 🆕 ADMIN CHECK
+    if (!isAdmin) {
       Alert.alert("Access Denied", "Only admin can create groups");
       return;
     }
@@ -116,7 +130,7 @@ export default function SelectMembersScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Checking permissions...</Text>
+        <Text>Loading...</Text>
       </View>
     );
   }
@@ -141,41 +155,46 @@ export default function SelectMembersScreen() {
         </Text>
       )}
       
-      {/* 🆕 SHOW ADMIN BADGE */}
-      
-      
       <Text style={styles.subtitle}>
         {selected.length} member{selected.length !== 1 ? 's' : ''} selected
       </Text>
       
       <FlatList
         data={users}
-        keyExtractor={item => item.id}
+        keyExtractor={item => item.id || item.uid} // ✅ Handle both id and uid
         renderItem={({ item }) => (
           <TouchableOpacity
-            onPress={() => toggleSelect(item.id)}
+            onPress={() => toggleSelect(item.id || item.uid)}
             style={[
               styles.userItem,
-              selected.includes(item.id) ? styles.selectedItem : styles.unselectedItem
+              selected.includes(item.id || item.uid) ? styles.selectedItem : styles.unselectedItem
             ]}
           >
             <Text style={[
               styles.userName,
-              selected.includes(item.id) && styles.selectedText
+              selected.includes(item.id || item.uid) && styles.selectedText
             ]}>
-              {item.name}
+              {item.name || "Unknown User"}
             </Text>
-            {/* {item.email && (
+            {item.email && (
               <Text style={[
                 styles.userEmail,
-                selected.includes(item.id) && styles.selectedText
+                selected.includes(item.id || item.uid) && styles.selectedText
               ]}>
                 {item.email}
               </Text>
-            )} */}
+            )}
           </TouchableOpacity>
         )}
         style={styles.list}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>No users found</Text>
+            <Text style={styles.emptySubtext}>
+              All available users are already in the group or you might be the only user.
+            </Text>
+          </View>
+        }
       />
       
       <TouchableOpacity 
@@ -228,17 +247,6 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 8,
   },
-  // 🆕 ADMIN BADGE STYLE
-  adminBadge: {
-    fontSize: 12,
-    color: "#FFD700",
-    textAlign: "center",
-    fontWeight: "bold",
-    marginBottom: 10,
-    backgroundColor: "#2C2C2C",
-    padding: 8,
-    borderRadius: 8,
-  },
   list: {
     flex: 1,
   },
@@ -288,5 +296,22 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 24,
     fontWeight: "bold",
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#999",
+    textAlign: "center",
+    lineHeight: 20,
   },
 });

@@ -29,6 +29,19 @@ const Settings = ({ navigation }: { navigation: any }) => {
     return () => unsubscribe();
   }, [userId]);
 
+  const handleLogout = async () => {
+    try {
+      setLoading(true);
+      await auth().signOut();
+      // Navigation will be handled by the auth state listener in your App.tsx or AuthNavigator
+      console.log("User signed out successfully");
+    } catch (error: any) {
+      console.error("Logout error:", error);
+      Alert.alert("Logout Failed", error.message);
+      setLoading(false);
+    }
+  };
+
   const handleOptionPress = (item: any) => {
     if (item.title === "Edit profile") {
       navigation.navigate("ProfileScreen", {
@@ -39,7 +52,11 @@ const Settings = ({ navigation }: { navigation: any }) => {
     } else if (item.title === "Logout") {
       Alert.alert("Logout", "Are you sure you want to logout?", [
         { text: "Cancel", style: "cancel" },
-        { text: "Logout", style: "destructive", onPress: () => auth().signOut() },
+        { 
+          text: "Logout", 
+          style: "destructive", 
+          onPress: handleLogout 
+        },
       ]);
     }
   };

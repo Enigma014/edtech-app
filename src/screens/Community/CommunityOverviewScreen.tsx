@@ -5,7 +5,10 @@ import {
   Text, 
   TouchableOpacity, 
   ScrollView, 
-  Alert 
+  Alert,
+  FlatList,
+  Modal,
+  ActivityIndicator
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { StyleSheet } from 'react-native';
@@ -28,11 +31,15 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
   const { id } = route.params || {};
   const [community, setCommunity] = useState<any>(null);
   const [groups, setGroups] = useState<any[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showAddMembersModal, setShowAddMembersModal] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
+  const [showAdminTransferModal, setShowAdminTransferModal] = useState(false);
+  const [loading, setLoading] = useState(true);
   const currentUser = auth().currentUser;
-
-  console.log("CommunityOverview received communityId:", id);
 
   useEffect(() => {
     if (!id) return;
@@ -41,13 +48,33 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
     const unsubscribeCommunity = firestore()
       .collection('communities')
       .doc(id)
-      .onSnapshot((doc) => {
+      .onSnapshot(async (doc) => {
         if (doc.exists) {
           const communityData = { id: doc.id, ...doc.data() };
           setCommunity(communityData);
           
           // Check if current user is admin
           setIsAdmin(communityData.admin === currentUser?.uid);
+
+          // Fetch member details
+          if (communityData.members && Array.isArray(communityData.members)) {
+            try {
+              const memberDocs = await Promise.all(
+                communityData.members.map(async (uid: string) => {
+                  const userDoc = await firestore().collection('users').doc(uid).get();
+                  const userData = userDoc.data();
+                  return { 
+                    id: uid, 
+                    name: userData?.name || "Unknown User",
+                    email: userData?.email || ""
+                  };
+                })
+              );
+              setMembers(memberDocs);
+            } catch (error) {
+              console.error("Error fetching members:", error);
+            }
+          }
         }
       });
 
@@ -63,6 +90,7 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
           ...doc.data(),
         }));
         setGroups(groupsData);
+        setLoading(false);
       });
 
     return () => {
@@ -71,22 +99,336 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
     };
   }, [id, currentUser?.uid]);
 
+  // Fetch available users to add to community
+  // const fetchAvailableUsers = async () => {
+  //   try {
+  //     const usersSnapshot = await firestore().collection('users').get();
+  //     const allUsers = usersSnapshot.docs.map(doc => ({
+  //       id: doc.id,
+  //       ...doc.data()
+  //     }));
+      
+  //     // Filter out users who are already members
+  //     const available = allUsers.filter(user => 
+  //       !community.members.includes(user.id) && user.id !== currentUser?.uid
+  //     );
+      
+  //     setAvailableUsers(available);
+  //     setShowAddMembersModal(true);
+  //     setShowMenu(false);
+  //   } catch (error) {
+  //     console.error("Error fetching users:", error);
+  //     Alert.alert("Error", "Failed to load available users");
+  //   }
+  // };
+// In CommunityOverviewScreen.tsx - Fix the handleAddMember function
+const handleAddMember = async (user: any) => {
+  try {
+    console.log("Adding user to community:", user);
+    
+    // 1. Add to community members
+    const updatedMembers = [...community.members, user.id];
+    await firestore().collection('communities').doc(id).update({
+      members: updatedMembers,
+    });
+
+    console.log("Added to community members");
+
+    // 2. Add to all groups in the community with proper error handling
+    const groupUpdatePromises = groups.map(async (group) => {
+      try {
+        const groupId = group.groupId || group.id;
+        console.log("Processing group:", groupId, group.name);
+        
+        const groupDoc = await firestore().collection('groups').doc(groupId).get();
+        
+        if (groupDoc.exists) {
+          const groupData = groupDoc.data();
+          const groupMembers = groupData?.members || [];
+          
+          // Check if user is already in the group
+          if (!groupMembers.includes(user.id)) {
+            const updatedGroupMembers = [...groupMembers, user.id];
+            
+            await firestore()
+              .collection('groups')
+              .doc(groupId)
+              .update({
+                members: updatedGroupMembers
+              });
+            
+            console.log(`Added to group: ${group.name}`);
+          } else {
+            console.log(`User already in group: ${group.name}`);
+          }
+        } else {
+          console.warn(`Group document not found: ${groupId}`);
+        }
+      } catch (groupError) {
+        console.error(`Error adding to group ${group.name}:`, groupError);
+        // Continue with other groups even if one fails
+      }
+    });
+
+    await Promise.all(groupUpdatePromises);
+    
+    setShowAddMembersModal(false);
+    Alert.alert("Success", `${user.name} added to the community and all groups`);
+    
+  } catch (error) {
+    console.error("Error adding member:", error);
+    Alert.alert("Error", "Failed to add member to community");
+  }
+};
+
+// Also fix the fetchAvailableUsers function to handle errors better
+const fetchAvailableUsers = async () => {
+  try {
+    console.log("Fetching available users...");
+    
+    const usersSnapshot = await firestore().collection('users').get();
+    const allUsers = usersSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    console.log("Total users found:", allUsers.length);
+    
+    // Filter out users who are already members
+    const available = allUsers.filter(user => {
+      const isAlreadyMember = community.members.includes(user.id);
+      const isCurrentUser = user.id === currentUser?.uid;
+      
+      if (isAlreadyMember) {
+        console.log(`Filtering out ${user.name} - already a member`);
+      }
+      if (isCurrentUser) {
+        console.log(`Filtering out ${user.name} - current user`);
+      }
+      
+      return !isAlreadyMember && !isCurrentUser;
+    });
+    
+    console.log("Available users after filtering:", available.length);
+    setAvailableUsers(available);
+    setShowAddMembersModal(true);
+    setShowMenu(false);
+    
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    Alert.alert("Error", "Failed to load available users");
+  }
+};
+  // Add member to community and all its groups
+  // const handleAddMember = async (user: any) => {
+  //   try {
+  //     // 1. Add to community members
+  //     const updatedMembers = [...community.members, user.id];
+  //     await firestore().collection('communities').doc(id).update({
+  //       members: updatedMembers,
+  //     });
+
+  //     // 2. Add to all groups in the community
+  //     const groupUpdatePromises = groups.map(async (group) => {
+  //       const groupId = group.groupId || group.id;
+  //       const groupDoc = await firestore().collection('groups').doc(groupId).get();
+        
+  //       if (groupDoc.exists) {
+  //         const groupData = groupDoc.data();
+  //         const groupMembers = groupData?.members || [];
+  //         const updatedGroupMembers = [...groupMembers, user.id];
+          
+  //         await firestore()
+  //           .collection('groups')
+  //           .doc(groupId)
+  //           .update({
+  //             members: updatedGroupMembers
+  //           });
+  //       }
+  //     });
+
+  //     await Promise.all(groupUpdatePromises);
+      
+  //     setShowAddMembersModal(false);
+  //     Alert.alert("Success", `${user.name} added to the community and all groups`);
+  //   } catch (error) {
+  //     console.error("Error adding member:", error);
+  //     Alert.alert("Error", "Failed to add member to community");
+  //   }
+  // };
+
+  // Make member admin
+  const handleMakeAdmin = (member: any) => {
+    Alert.alert(
+      "Make Admin",
+      `Make ${member.name} the community admin?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Make Admin",
+          onPress: async () => {
+            try {
+              await firestore().collection('communities').doc(id).update({
+                admin: member.id,
+              });
+              Alert.alert("Success", `${member.name} is now the community admin`);
+              setShowMembersModal(false);
+            } catch (error) {
+              console.error("Error transferring admin:", error);
+              Alert.alert("Error", "Failed to transfer admin role");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRemoveMember = (memberId: string, memberName: string) => {
+    Alert.alert(
+      "Remove Member",
+      `Remove ${memberName} from the community? They will be removed from all community groups.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            if (!community) return;
+            
+            try {
+              // 1. Remove from community
+              const updatedMembers = community.members.filter((uid: string) => uid !== memberId);
+              await firestore().collection('communities').doc(id).update({
+                members: updatedMembers,
+              });
+
+              // 2. Remove from all community groups
+              const groupUpdatePromises = groups.map(async (group) => {
+                const groupId = group.groupId || group.id;
+                const groupDoc = await firestore().collection('groups').doc(groupId).get();
+                
+                if (groupDoc.exists) {
+                  const groupData = groupDoc.data();
+                  const groupMembers = groupData?.members || [];
+                  const updatedGroupMembers = groupMembers.filter((uid: string) => uid !== memberId);
+                  
+                  await firestore()
+                    .collection('groups')
+                    .doc(groupId)
+                    .update({
+                      members: updatedGroupMembers
+                    });
+                }
+              });
+
+              await Promise.all(groupUpdatePromises);
+              Alert.alert("Success", `${memberName} removed from community`);
+              
+            } catch (error) {
+              console.error("Error removing member:", error);
+              Alert.alert("Error", "Failed to remove member");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleAddGroup = () => {
     navigation.navigate('ManageGroupsScreen', { id });
   };
 
-  const handleAddMembers = () => {
-    setShowMenu(false);
-    navigation.navigate('SelectMembersScreen', { 
-      communityId: id,
-      communityName: community?.name 
-    });
+  const handleDeleteCommunity = async () => {
+    Alert.alert(
+      "Delete Community", 
+      "Are you sure? This will delete the community and all its groups. This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              // Delete all groups first
+              const groupDeletePromises = groups.map(async (group) => {
+                const groupId = group.groupId || group.id;
+                await firestore().collection('groups').doc(groupId).delete();
+              });
+
+              await Promise.all(groupDeletePromises);
+
+              // Delete the community document
+              await firestore().collection('communities').doc(id).delete();
+              
+              navigation.goBack();
+              Alert.alert("Success", "Community deleted successfully");
+              
+            } catch (error) {
+              console.error("Error deleting community:", error);
+              Alert.alert("Error", "Failed to delete community");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Function to transfer admin rights
+  const transferAdminRights = async (member?: any) => {
+    if (member) {
+      // Transfer to specific member
+      try {
+        await firestore()
+          .collection('communities')
+          .doc(id)
+          .update({
+            admin: member.id
+          });
+        
+        Alert.alert("Success", `Admin rights transferred to ${member.name}`);
+        setShowAdminTransferModal(false);
+      } catch (error) {
+        console.error("Error transferring admin:", error);
+        Alert.alert("Error", "Failed to transfer admin rights");
+      }
+    } else {
+      // Show modal to select admin
+      setShowAdminTransferModal(true);
+      setShowMenu(false);
+    }
   };
 
   // Exit Community (Leave but keep community for others)
   const handleExitCommunity = () => {
     setShowMenu(false);
     
+    if (isAdmin) {
+      const otherMembers = members.filter(member => member.id !== currentUser?.uid);
+      
+      if (otherMembers.length === 0) {
+        // No other members - delete community
+        handleDeleteCommunity();
+      } else {
+        Alert.alert(
+          "Admin Cannot Exit",
+          "Please transfer admin rights to another member before leaving, or delete the community.",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Transfer Admin Rights",
+              onPress: () => transferAdminRights()
+            },
+            {
+              text: "Delete Community",
+              style: "destructive",
+              onPress: handleDeleteCommunity,
+            },
+          ]
+        );
+      }
+      return;
+    }
+
     Alert.alert(
       "Exit Community",
       "Are you sure you want to leave this community? You will no longer be able to send messages in any of the community groups.",
@@ -145,56 +487,6 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
     );
   };
 
-  // Exit and Delete Community (Remove community completely)
-  const handleExitAndDeleteCommunity = () => {
-    setShowMenu(false);
-    
-    if (!isAdmin) {
-      Alert.alert(
-        "Delete Community",
-        "Are you sure you want to delete this community? This action cannot be undone and all groups will be lost.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: async () => {
-              try {
-                // Delete the community document
-                await firestore()
-                  .collection('communities')
-                  .doc(id)
-                  .delete();
-
-                // Delete all groups in this community
-                const groupDeletions = groups.map(async (group) => {
-                  await firestore()
-                    .collection('groups')
-                    .doc(group.groupId || group.id)
-                    .delete();
-                });
-
-                await Promise.all(groupDeletions);
-                
-                Alert.alert("Success", "Community deleted successfully");
-                navigation.goBack();
-              } catch (error) {
-                console.error("Error deleting community:", error);
-                Alert.alert("Error", "Failed to delete community");
-              }
-            }
-          }
-        ]
-      );
-    } else {
-      Alert.alert(
-        "Admin Restriction",
-        "As the community admin, you cannot delete the community while you're still a member. Please transfer admin rights first or use 'Exit' to leave the community.",
-        [{ text: "OK" }]
-      );
-    }
-  };
-
   const formatDate = (timestamp: any) => {
     if (!timestamp) return "";
     try {
@@ -209,7 +501,7 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
     }
   };
 
-  if (!community) {
+  if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <Text>Loading community...</Text>
@@ -217,9 +509,18 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
     );
   }
 
+  if (!community) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text>Community not found</Text>
+      </View>
+    );
+  }
+
   // Separate groups
   const announcementsGroup = groups.find(g => g.isAnnouncement);
   const otherGroups = groups.filter(g => !g.isAnnouncement);
+  const otherMembers = members.filter(member => member.id !== currentUser?.uid);
 
   return (
     <View style={styles.container}>
@@ -235,7 +536,7 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
           
           <View style={styles.headerTitle}>
             <Text style={styles.communityName}>{community.name}</Text>
-            <Text style={styles.subtitle}>Community · {groups.length} groups</Text>
+            <Text style={styles.subtitle}>Community · {groups.length} groups · {members.length} members</Text>
           </View>
 
           {/* Three-Dot Menu */}
@@ -249,10 +550,23 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
           {/* Menu Options */}
           {showMenu && (
             <View style={styles.menuOptions}>
+              {/* View Members */}
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowMembersModal(true);
+                  setShowMenu(false);
+                }}
+              >
+                <Ionicons name="people-outline" size={18} color="#666" />
+                <Text style={styles.menuText}>View Members</Text>
+              </TouchableOpacity>
+
+              {/* Only show Add Members for admin */}
               {isAdmin && (
                 <TouchableOpacity
                   style={styles.menuItem}
-                  onPress={handleAddMembers}
+                  onPress={fetchAvailableUsers}
                 >
                   <Ionicons name="person-add-outline" size={18} color="#666" />
                   <Text style={styles.menuText}>Add Members</Text>
@@ -265,29 +579,9 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
                 onPress={handleExitCommunity}
               >
                 <Ionicons name="exit-outline" size={18} color="#ff6b6b" />
-                <Text style={[styles.menuText, styles.exitText]}>Exit Community</Text>
-              </TouchableOpacity>
-
-              {/* Exit and Delete Option - Available for non-admins only */}
-              {!isAdmin && (
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={handleExitAndDeleteCommunity}
-                >
-                  <Ionicons name="trash-outline" size={18} color="#ff6b6b" />
-                  <Text style={[styles.menuText, styles.exitText]}>Exit and Delete</Text>
-                </TouchableOpacity>
-              )}
-
-              <TouchableOpacity
-                style={styles.menuItem}
-                onPress={() => {
-                  setShowMenu(false);
-                  // Add more options here if needed
-                }}
-              >
-                <Ionicons name="settings-outline" size={18} color="#666" />
-                <Text style={styles.menuText}>Community Settings</Text>
+                <Text style={[styles.menuText, styles.exitText]}>
+                  {isAdmin ? 'Transfer Admin & Exit' : 'Exit Community'}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -303,7 +597,7 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
       )}
 
       <ScrollView style={styles.scrollContent}>
-        {/* Community Card */}
+        {/* Community Info Card */}
         <View style={styles.communityCard}>
           <View style={styles.communityHeader}>
             <Ionicons name="people-outline" size={28} color="#000" />
@@ -314,6 +608,26 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
               {isAdmin && (
                 <Text style={styles.adminBadge}>ADMIN</Text>
               )}
+            </View>
+          </View>
+
+          <View style={styles.divider} />
+
+          {/* Quick Stats */}
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{groups.length}</Text>
+              <Text style={styles.statLabel}>Groups</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{members.length}</Text>
+              <Text style={styles.statLabel}>Members</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {community.createdAt?.toDate?.()?.toLocaleDateString() || 'Recent'}
+              </Text>
+              <Text style={styles.statLabel}>Created</Text>
             </View>
           </View>
 
@@ -403,11 +717,173 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
           )}
         </View>
 
-        {/* Add Group Button */}
-        <TouchableOpacity style={styles.addButton} onPress={handleAddGroup}>
-          <Text style={styles.addButtonText}>+ Add group</Text>
-        </TouchableOpacity>
+        {/* Add Group Button - Only show for admin */}
+        {isAdmin && (
+          <TouchableOpacity style={styles.addButton} onPress={handleAddGroup}>
+            <Text style={styles.addButtonText}>+ Add group</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
+
+      {/* Members Modal */}
+      <Modal
+        visible={showMembersModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowMembersModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Community Members</Text>
+            <Text style={styles.modalSubtitle}>{members.length} members</Text>
+            
+            <FlatList
+              data={members}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => {
+                const isMemberAdmin = item.id === community.admin;
+                const isCurrentUser = item.id === currentUser?.uid;
+                
+                return (
+                  <View style={styles.memberItem}>
+                    <View style={styles.memberInfo}>
+                      <View style={styles.memberAvatar}>
+                        <Text style={styles.memberAvatarText}>
+                          {item.name?.[0]?.toUpperCase() || "U"}
+                        </Text>
+                      </View>
+                      <View>
+                        <Text style={[
+                          styles.memberName,
+                          isCurrentUser && styles.currentUserText
+                        ]}>
+                          {item.name} {isCurrentUser && "(You)"}
+                        </Text>
+                        <Text style={styles.memberEmail}>{item.email}</Text>
+                      </View>
+                    </View>
+                    
+                    <View style={styles.memberActions}>
+                      {isMemberAdmin && (
+                        <Text style={styles.adminBadge}>Admin</Text>
+                      )}
+                      {isAdmin && !isMemberAdmin && (
+                        <View style={styles.adminControls}>
+                          <TouchableOpacity
+                            onPress={() => handleMakeAdmin(item)}
+                            style={styles.makeAdminButton}
+                          >
+                            <Text style={styles.makeAdminButtonText}>Make Admin</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleRemoveMember(item.id, item.name)}
+                            style={styles.removeButton}
+                          >
+                            <Text style={styles.removeButtonText}>Remove</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              }}
+            />
+            
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowMembersModal(false)}
+            >
+              <Text style={styles.modalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Add Members Modal */}
+      <Modal
+        visible={showAddMembersModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAddMembersModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Add Members to Community</Text>
+            <FlatList
+              data={availableUsers}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.userItem}
+                  onPress={() => handleAddMember(item)}
+                >
+                  <View style={styles.userAvatar}>
+                    <Text style={styles.userAvatarText}>
+                      {item.name?.[0]?.toUpperCase() || "U"}
+                    </Text>
+                  </View>
+                  <View style={styles.userInfo}>
+                    <Text style={styles.userName}>{item.name}</Text>
+                    <Text style={styles.userEmail}>{item.email}</Text>
+                  </View>
+                  <Ionicons name="add-circle-outline" size={24} color="#25D366" />
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                <Text style={styles.emptyText}>No users available to add</Text>
+              }
+            />
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowAddMembersModal(false)}
+            >
+              <Text style={styles.modalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Admin Transfer Modal */}
+      <Modal
+        visible={showAdminTransferModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowAdminTransferModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Transfer Admin Role</Text>
+            <Text style={styles.modalSubtitle}>Select a new admin for the community:</Text>
+            <FlatList
+              data={otherMembers}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.userItem}
+                  onPress={() => transferAdminRights(item)}
+                >
+                  <View style={styles.userAvatar}>
+                    <Text style={styles.userAvatarText}>
+                      {item.name?.[0]?.toUpperCase() || "U"}
+                    </Text>
+                  </View>
+                  <View style={styles.userInfo}>
+                    <Text style={styles.userName}>{item.name}</Text>
+                    <Text style={styles.userEmail}>{item.email}</Text>
+                  </View>
+                  <Ionicons name="shield-outline" size={24} color="#25D366" />
+                </TouchableOpacity>
+              )}
+            />
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowAdminTransferModal(false)}
+            >
+              <Text style={styles.modalCloseText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -534,6 +1010,24 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     fontWeight: "bold"
   },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 15,
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statNumber: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#25D366',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
   divider: {
     height: 1,
     backgroundColor: "#f0f0f0",
@@ -601,6 +1095,157 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    padding: 20,
+    width: "100%",
+    maxHeight: "80%",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 10,
+    color: "#000",
+    textAlign: "center",
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  memberItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  memberInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  memberAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#25D366",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  memberAvatarText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  memberName: {
+    fontSize: 16,
+    color: "#000",
+    fontWeight: "500",
+  },
+  currentUserText: {
+    color: "#25D366",
+  },
+  memberEmail: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  memberActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  adminControls: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  makeAdminButton: {
+    backgroundColor: "#fff",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  makeAdminButtonText: {
+    color: "#25d366",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  removeButton: {
+    backgroundColor: "#fff",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  removeButtonText: {
+    color: "#ff3b30",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  userItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  userAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#25D366",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  userAvatarText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#000",
+  },
+  userEmail: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#666",
+    fontStyle: "italic",
+    padding: 20,
+  },
+  modalCloseButton: {
+    marginTop: 15,
+    padding: 12,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  modalCloseText: {
+    color: "#25D366",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });
 

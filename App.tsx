@@ -4,11 +4,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NativeBaseProvider } from 'native-base';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import LoginScreen from './src/auth/Login';
 import RegisterScreen from './src/auth/Register';
 import ForgotPasswordScreen from './src/auth/models/ForgotPasswordScreen';
-
+import 'react-native-gesture-handler';
 import SettingsScreen from './src/screens/Settings/Settings';
 import CommunityScreen from './src/screens/Community/Community';
 import CreateCommunityScreen from './src/screens/Community/CreateCommunityScreen';
@@ -25,6 +25,8 @@ import GroupCreationScreen from './src/screens/Groups/GroupCreationScreen';
 import GroupInfoScreen from './src/screens/Groups/GroupInfoScreen';
 import ContactProfileScreen from './src/screens/Chats/ContactProfileScreen';
 import SelectGroupsScreen from './src/screens/Community/SelectGroupsScreen';
+import ListUsers from './src/screens/Chats/ListUsers';
+
 import '@utils/firebaseConfig';
 const Stack = createNativeStackNavigator();
 
@@ -32,7 +34,9 @@ const App = () => {
   const isDarkMode = useColorScheme() === 'dark';
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaProvider>
+      
       <NativeBaseProvider>
         <NavigationContainer>
           <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
@@ -135,12 +139,21 @@ const App = () => {
               component={SelectGroupsScreen}
               options={{ headerShown: false }}
             />
+            <Stack.Screen
+              name="ListUsers"
+              component={ListUsers}
+              options={{ headerShown: false }}
+            />
+            
           </Stack.Navigator>
           
 
         </NavigationContainer>
       </NativeBaseProvider>
+      
     </SafeAreaProvider>
+    </GestureHandlerRootView>
+    
   );
 };
 

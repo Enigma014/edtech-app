@@ -82,7 +82,17 @@ export default function ManageGroupsScreen({ route, navigation }) {
     });
   };
 
-  const deleteGroup = async (groupId, groupName) => {
+  const deleteGroup = async (groupId, groupName, isAnnouncement) => {
+    // Prevent deletion of Announcement and General groups
+    if (isAnnouncement || groupName === "General") {
+      Alert.alert(
+        "Cannot Delete", 
+        `${groupName} is a default group and cannot be deleted.`,
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     Alert.alert(
       "Delete group", 
       `Are you sure you want to delete "${groupName}"? This action cannot be undone.`,
@@ -181,29 +191,37 @@ export default function ManageGroupsScreen({ route, navigation }) {
         <FlatList
           data={groups}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <View style={styles.groupRow}>
-              <View style={styles.groupIcon}>
-                <Icon
-                  name={item.isAnnouncement ? "bullhorn" : "chat-outline"}
-                  size={22}
-                  color="#333"
-                />
+          renderItem={({ item }) => {
+            const isDefaultGroup = item.isAnnouncement || item.name === "General";
+            
+            return (
+              <View style={styles.groupRow}>
+                <View style={styles.groupIcon}>
+                  <Icon
+                    name={item.isAnnouncement ? "bullhorn" : "chat-outline"}
+                    size={22}
+                    color="#333"
+                  />
+                </View>
+                <View style={styles.groupInfo}>
+                  <Text style={styles.groupName}>{item.name}</Text>
+                  <Text style={styles.groupSub}>
+                    {item.isAnnouncement ? "Announcement Group" : "Discussion Group"}
+                    {isDefaultGroup && " • Default"}
+                  </Text>
+                </View>
+                {/* Only show delete button for non-default groups */}
+                {!isDefaultGroup && (
+                  <TouchableOpacity 
+                    style={styles.deleteButton}
+                    onPress={() => deleteGroup(item.id, item.name, item.isAnnouncement)}
+                  >
+                    <Icon name="close" size={20} color="#999" />
+                  </TouchableOpacity>
+                )}
               </View>
-              <View style={styles.groupInfo}>
-                <Text style={styles.groupName}>{item.name}</Text>
-                <Text style={styles.groupSub}>
-                  {item.isAnnouncement ? "Announcement Group" : "Discussion Group"}
-                </Text>
-              </View>
-              <TouchableOpacity 
-                style={styles.deleteButton}
-                onPress={() => deleteGroup(item.id, item.name)}
-              >
-                <Icon name="close" size={20} color="#999" />
-              </TouchableOpacity>
-            </View>
-          )}
+            );
+          }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Icon name="account-group-outline" size={60} color="#ccc" />

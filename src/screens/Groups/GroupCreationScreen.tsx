@@ -21,16 +21,21 @@ export default function GroupCreationScreen() {
   const [groupName, setGroupName] = useState("");
   const [groupPic, setGroupPic] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false); // 🆕 Track success state
   const navigation = useNavigation();
   const route = useRoute<any>();
   
   const { selectedMembers = [], selectedUsersData = [], communityId } = route.params || {};
   
-  // 🚨 FIXED: Follows the same pattern as SelectGroupsScreen but for NEW groups
-  // In your GroupCreationScreen - UPDATE the community group creation
+  const resetForm = () => {
+    setGroupName("");
+    setGroupPic(null);
+    setLoading(false);
+    setSuccess(false);
+  };
+
   const addGroupToCommunity = async () => {
-    // 🆕 PREVENT MULTIPLE CLICKS
-    if (loading) return;
+    if (loading || success) return; // 🆕 Prevent if success
     
     if (!groupName.trim()) {
       return Alert.alert("Error", "Enter a group name");
@@ -50,7 +55,6 @@ export default function GroupCreationScreen() {
       
       const members = [currentUser.uid, ...selectedMembers.map((m: any) => m.id || m)];
   
-      // 🆕 CHECK IF GROUP NAME ALREADY EXISTS IN THIS COMMUNITY
       const existingGroupsSnapshot = await firestore()
         .collection("communities")
         .doc(communityId)
@@ -64,7 +68,6 @@ export default function GroupCreationScreen() {
         return;
       }
   
-      // STEP 1: Create the main group in groups collection
       const mainGroupRef = firestore().collection("groups").doc();
       
       const mainGroupData = {
@@ -84,7 +87,6 @@ export default function GroupCreationScreen() {
   
       await mainGroupRef.set(mainGroupData);
   
-      // STEP 2: Add to community's groups subcollection
       await firestore()
         .collection("communities")
         .doc(communityId)
@@ -106,12 +108,11 @@ export default function GroupCreationScreen() {
   
       console.log("✅ [DEBUG] New community group created successfully!");
       
-      // 🆕 SUCCESS: Navigate back to Community screen
+      setSuccess(true); // 🆕 Mark as successful
       Alert.alert("Success", "Group added to community successfully!", [
         {
           text: "OK",
           onPress: () => {
-            // Go back to Community screen
             navigation.navigate('CommunityScreen');
           }
         }
@@ -120,73 +121,101 @@ export default function GroupCreationScreen() {
     } catch (error) {
       console.error("❌ Error adding group to community:", error);
       Alert.alert("Error", "Failed to add group to community");
-    } finally {
       setLoading(false);
     }
   };
 
-const handleCreateGroup = async () => {
-  // 🆕 PREVENT MULTIPLE CLICKS
-  if (loading) return;
-  
-  if (!groupName.trim()) {
-    return Alert.alert("Error", "Enter a group name");
-  }
-
-  if (!Array.isArray(selectedMembers) || selectedMembers.length === 0) {
-    return Alert.alert("Error", "Select at least one member");
-  }
-
-  const currentUser = authService.currentUser;
-  if (!currentUser) return Alert.alert("Error", "Please login again");
-
-  // 🆕 USE THE FIXED FUNCTION for community groups
-  if (communityId) {
-    return addGroupToCommunity();
-  }
-
-  // Regular group creation (non-community) - UNCHANGED
-  setLoading(true);
-
-  try {
-    console.log("💬 Creating regular group (non-community)");
+  const handleCreateGroup = async () => {
+    if (loading || success) return; // 🆕 Prevent if success or loading
     
-    const groupRef = firestore().collection("groups").doc();
-    
-    const members = [currentUser.uid, ...selectedMembers.map((m: any) => m.id || m)];
+    if (!groupName.trim()) {
+      return Alert.alert("Error", "Enter a group name");
+    }
 
-    const groupData = {
-      id: groupRef.id,
-      name: groupName,
-      groupPic: groupPic || null,
-      members,
-      createdBy: currentUser.uid,
-      admin: currentUser.uid,
-      createdAt: firestore.FieldValue.serverTimestamp(),
-      lastMessage: "Group created",
-      lastMessageTime: firestore.FieldValue.serverTimestamp(),
-      isGroup: true,
-      isCommunityGroup: false,
+    if (!Array.isArray(selectedMembers) || selectedMembers.length === 0) {
+      return Alert.alert("Error", "Select at least one member");
+    }
+
+    const currentUser = authService.currentUser;
+    if (!currentUser) return Alert.alert("Error", "Please login again");
+
+    if (communityId) {
+      return addGroupToCommunity();
+    }
+
+    setLoading(true);
+
+    try {
+      console.log("💬 Creating regular group (non-community)");
+      
+      const groupRef = firestore().collection("groups").doc();
+      
+      const members = [currentUser.uid, ...selectedMembers.map((m: any) => m.id || m)];
+
+      const groupData = {
+        id: groupRef.id,
+        name: groupName,
+        groupPic: groupPic || null,
+        members,
+        createdBy: currentUser.uid,
+        admin: currentUser.uid,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        lastMessage: "Group created",
+        lastMessageTime: firestore.FieldValue.serverTimestamp(),
+        isGroup: true,
+        isCommunityGroup: false,
+      };
+
+      await groupRef.set(groupData);
+
+      console.log("✅ [DEBUG] Regular group created successfully!");
+
+      // 🆕 SIMPLE FIX: Keep button disabled for 3 seconds after success
+      setSuccess(true);
+      setLoading(false);
+      
+      // Auto-navigate after 2 seconds
+      setTimeout(() => {
+        navigation.navigate("ChatScreen", {
+          groupId: groupRef.id,
+          isGroup: true,
+          groupName: groupName,
+        });
+      }, 2000);
+      
+    } catch (error) {
+      console.error("❌ Failed to create group:", error);
+      Alert.alert("Error", "Failed to create group");
+      setLoading(false);
+    }
+  };
+
+  // 🆕 Determine button state and text
+  const getButtonState = () => {
+    if (success) {
+      return {
+        disabled: true,
+        text: communityId ? "✓ Added to Community" : "✓ Group Created!",
+        style: styles.createButtonSuccess
+      };
+    }
+    
+    if (loading) {
+      return {
+        disabled: true,
+        text: "Creating...",
+        style: styles.createButtonDisabled
+      };
+    }
+    
+    return {
+      disabled: !groupName.trim(),
+      text: communityId ? "Add to Community" : "Create Group",
+      style: styles.createButton
     };
+  };
 
-    await groupRef.set(groupData);
-
-    console.log("✅ [DEBUG] Regular group created successfully!");
-
-    // Navigate to ChatScreen for regular groups only
-    navigation.navigate("ChatScreen", {
-      groupId: groupRef.id,
-      isGroup: true,
-      groupName: groupName,
-    });
-    
-  } catch (error) {
-    console.error("❌ Failed to create group:", error);
-    Alert.alert("Error", "Failed to create group");
-  } finally {
-    setLoading(false);
-  }
-};
+  const buttonState = getButtonState();
 
   return (
     <View style={styles.container}>
@@ -197,7 +226,8 @@ const handleCreateGroup = async () => {
       {/* Group Image */}
       <TouchableOpacity 
         style={styles.imageContainer}
-        onPress={() => Alert.alert("Pick Image (to implement later)")}
+        onPress={() => !success && Alert.alert("Pick Image (to implement later)")} // 🆕 Disable when success
+        disabled={success}
       >
         {groupPic ? (
           <Image source={{ uri: groupPic }} style={styles.groupImage} />
@@ -215,6 +245,7 @@ const handleCreateGroup = async () => {
         value={groupName}
         onChangeText={setGroupName}
         style={styles.input}
+        editable={!loading && !success} // 🆕 Disable when success
       />
 
       {/* Selected Members */}
@@ -231,27 +262,26 @@ const handleCreateGroup = async () => {
             🏢 This group will be added using the same pattern as "Add Existing Groups"
           </Text>
         )}
+        {/* {success && ( // 🆕 Success message
+          <Text style={styles.successNote}>
+            ✓ {communityId ? "Group added to community!" : "Group created successfully! Redirecting..."}
+          </Text>
+        )} */}
       </View>
 
       {/* Create Button */}
-      {/* Create Button */}
-<TouchableOpacity
-  style={[
-    styles.createButton,
-    (!groupName.trim() || loading) && styles.createButtonDisabled
-  ]}
-  onPress={handleCreateGroup}
-  disabled={!groupName.trim() || loading} // 🆕 THIS IS IMPORTANT
->
-  <Text style={styles.createButtonText}>
-    {loading ? "Creating..." : communityId ? "Add to Community" : "Create Group"}
-  </Text>
-</TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.createButtonBase, buttonState.style]}
+        onPress={handleCreateGroup}
+        disabled={buttonState.disabled}
+      >
+        <Text style={styles.createButtonText}>
+          {buttonState.text}
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
-
-// ... your styles remain the same
 
 const styles = StyleSheet.create({
   container: { 
@@ -324,8 +354,14 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontWeight: "500",
   },
-  createButton: {
-    backgroundColor: "#25D366",
+  successNote: {
+    fontSize: 14,
+    color: "#25D366",
+    fontWeight: "600",
+    marginTop: 8,
+    textAlign: "center",
+  },
+  createButtonBase: {
     padding: 16,
     borderRadius: 25,
     alignItems: "center",
@@ -335,8 +371,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 3,
   },
+  createButton: {
+    backgroundColor: "#25D366",
+  },
   createButtonDisabled: {
     backgroundColor: "#CCCCCC",
+  },
+  createButtonSuccess: {
+    backgroundColor: "#25D366", // Different green for success
   },
   createButtonText: {
     color: "#FFFFFF",

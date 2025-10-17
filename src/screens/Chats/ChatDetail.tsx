@@ -23,18 +23,77 @@ import {
   generateChatId,
 } from "../../utils/firebase/Chat";
 import auth from "@react-native-firebase/auth";
+import firestore from "@react-native-firebase/firestore";
 
 const ChatDetailScreen = ({ route, navigation }: any) => {
-  const { chatId: initialChatId, name, receiverId, isGroup, contactId } = route.params;
+  const { chatId: initialChatId, name, receiverId, isGroup, contactId, isCommunity, communityId } = route.params;
   const currentUserId = auth().currentUser?.uid;
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<any[]>([]);
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [contactName, setContactName] = useState(name || "Unknown");
+  const [contactData, setContactData] = useState<any>(null);
+  const [groupData, setGroupData] = useState<any>(null);
   const flatListRef = useRef<FlatList>(null);
 
   const chatId = initialChatId || generateChatId(currentUserId, receiverId);
+
+  // ✅ Fetch contact/group data
+  useEffect(() => {
+    const fetchData = async () => {
+      if (name) return; // If name is already provided, use it
+
+      try {
+        if (isGroup) {
+          // Fetch group data
+          console.log("Fetching group data for:", chatId);
+          const groupDoc = await firestore()
+            .collection('groups')
+            .doc(chatId)
+            .get();
+
+          if (groupDoc.exists) {
+            const data = groupDoc.data();
+            setGroupData(data);
+            setContactName(data?.name || "Unknown Group");
+          } else {
+            console.log("Group not found in database");
+            setContactName("Unknown Group");
+          }
+        } else {
+          // Fetch contact data for individual chat
+          let contactToFetch = contactId || receiverId;
+          
+          if (!contactToFetch) {
+            console.log("No contact ID available");
+            return;
+          }
+
+          console.log("Fetching contact data for:", contactToFetch);
+          const contactDoc = await firestore()
+            .collection('users')
+            .doc(contactToFetch)
+            .get();
+
+          if (contactDoc.exists) {
+            const data = contactDoc.data();
+            setContactName(data?.name || "Unknown");
+            setContactData(data);
+          } else {
+            console.log("Contact not found in database");
+            setContactName("Unknown User");
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        setContactName("Error Loading");
+      }
+    };
+
+    fetchData();
+  }, [name, contactId, receiverId, isGroup, chatId]);
 
   // ✅ Listen to real-time chat messages
   useEffect(() => {
@@ -56,11 +115,19 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
   // ✅ Send message
   const handleSend = async () => {
     if (!message.trim() || !currentUserId) return;
+    
+    // Determine the actual receiver ID
+    const actualReceiverId = isGroup ? chatId : (receiverId || contactId);
+    if (!actualReceiverId) {
+      Alert.alert("Error", "Cannot send message: receiver not specified");
+      return;
+    }
+
     const optimisticMsg = {
       id: `temp-${Date.now()}`,
       text: message.trim(),
       senderId: currentUserId,
-      receiverId,
+      receiverId: actualReceiverId,
       createdAt: new Date(),
       isOptimistic: true,
     };
@@ -68,9 +135,12 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     setMessage("");
 
     try {
-      await sendMessage(chatId, currentUserId, receiverId, message, null);
+      await sendMessage(chatId, currentUserId, actualReceiverId, message, null);
     } catch (error) {
       console.error("Error sending message:", error);
+      // Remove optimistic message on error
+      setMessages((prev) => prev.filter(m => m.id !== optimisticMsg.id));
+      Alert.alert("Error", "Failed to send message");
     }
   };
 
@@ -95,6 +165,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
             setMessages((prev) => prev.filter((m) => m.id !== messageId));
           } catch (error) {
             console.error("Error deleting message:", error);
+            Alert.alert("Error", "Failed to delete message");
           }
         },
       },
@@ -112,8 +183,10 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
           try {
             await deleteAllMessages(chatId, currentUserId);
             setMessages([]);
+            setMenuVisible(false);
           } catch (error) {
             console.error("Error clearing chat:", error);
+            Alert.alert("Error", "Failed to clear chat");
           }
         },
       },
@@ -123,8 +196,50 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
   // ✅ Open contact or group info
   const handleViewInfo = () => {
     setMenuVisible(false);
-    if (isGroup) navigation.navigate("GroupInfoScreen", { groupId: chatId });
-    if (contactId) navigation.navigate("ContactProfileScreen", { contactId });
+    
+    if (isGroup) {
+      console.log("Navigating to GroupInfoScreen with groupId:", chatId);
+      navigation.navigate("GroupInfoScreen", { 
+        groupId: chatId,
+        groupName: contactName,
+        isCommunity: isCommunity || false,
+        communityId: communityId || null
+      });
+    } else {
+      // Navigate to ContactProfileScreen with the correct contact ID
+      const actualContactId = contactId || receiverId;
+      if (actualContactId) {
+        navigation.navigate("ContactProfileScreen", { 
+          contactId: actualContactId,
+          contactName: contactName 
+        });
+      } else {
+        Alert.alert("Error", "Contact information not available");
+      }
+    }
+  };
+
+  // ✅ Navigate to contact profile when tapping the name
+  const handleNamePress = () => {
+    if (isGroup) {
+      console.log("Tapping group name, navigating to GroupInfoScreen with groupId:", chatId);
+      navigation.navigate("GroupInfoScreen", { 
+        groupId: chatId,
+        groupName: contactName,
+        isCommunity: isCommunity || false,
+        communityId: communityId || null
+      });
+    } else {
+      // For individual chats, show contact profile
+      const actualContactId = contactId || receiverId;
+      if (actualContactId) {
+        navigation.navigate("ContactProfileScreen", { 
+          contactId: actualContactId 
+        });
+      } else {
+        Alert.alert("Error", "Contact information not available");
+      }
+    }
   };
 
   // ✅ Render message
@@ -167,8 +282,11 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
               <Icon name="arrow-left" size={24} color="#000" />
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={handleViewInfo}>
-              <Text style={styles.contactName}>{name}</Text>
+            <TouchableOpacity onPress={handleNamePress} style={styles.nameContainer}>
+              <Text style={styles.contactName}>{contactName}</Text>
+              <Text style={styles.statusText}>
+                {isGroup ? `${messages.length} messages` : "Online"}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -187,6 +305,12 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.2}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No messages yet</Text>
+              <Text style={styles.emptySubtext}>Start a conversation by sending a message</Text>
+            </View>
+          }
         />
 
         {/* ✅ Input Bar */}
@@ -199,12 +323,17 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
               style={styles.textInput}
               value={message}
               onChangeText={setMessage}
+              multiline
             />
             <Icon name="paperclip" size={22} color="gray" style={styles.iconRight} />
             <Icon name="camera-outline" size={22} color="gray" style={styles.iconRight} />
           </View>
 
-          <TouchableOpacity style={styles.micButton} onPress={handleSend}>
+          <TouchableOpacity 
+            style={[styles.micButton, !message.trim() && styles.micButtonDisabled]} 
+            onPress={handleSend}
+            disabled={!message.trim()}
+          >
             <Icon name="send" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -223,7 +352,9 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
           >
             <View style={styles.menuContainer}>
               <TouchableOpacity onPress={handleViewInfo} style={styles.menuItem}>
-                <Text style={styles.menuText}>View Info</Text>
+                <Text style={styles.menuText}>
+                  {isGroup ? "Group Info" : "View Info"}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleClearChat} style={styles.menuItem}>
                 <Text style={[styles.menuText, { color: "red" }]}>Clear Chat</Text>
@@ -245,26 +376,89 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     backgroundColor: "#fff",
-    paddingVertical: 30,
+    paddingVertical: 15,
     paddingHorizontal: 15,
     elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
   },
-  headerLeft: { flexDirection: "row", alignItems: "center" },
-  contactName: { fontSize: 18, fontWeight: "600", marginLeft: 10 },
-  chatContainer: { padding: 10, flexGrow: 1 },
-  messageRow: { flexDirection: "row", marginVertical: 4, paddingHorizontal: 8 },
-  myMessageRow: { justifyContent: "flex-end" },
-  theirMessageRow: { justifyContent: "flex-start" },
-  messageBubble: { padding: 12, borderRadius: 8, maxWidth: "80%" },
-  myMessage: { backgroundColor: "#dcf8c6", borderTopRightRadius: 0 },
-  theirMessage: { backgroundColor: "#fff", borderTopLeftRadius: 0 },
-  messageText: { color: "#000", fontSize: 16, lineHeight: 20 },
+  headerLeft: { 
+    flexDirection: "row", 
+    alignItems: "center",
+    flex: 1,
+  },
+  nameContainer: {
+    marginLeft: 10,
+  },
+  contactName: { 
+    fontSize: 18, 
+    fontWeight: "600", 
+    color: "#000",
+  },
+  statusText: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  chatContainer: { 
+    padding: 10, 
+    flexGrow: 1,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 50,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#999",
+    textAlign: "center",
+  },
+  messageRow: { 
+    flexDirection: "row", 
+    marginVertical: 4, 
+    paddingHorizontal: 8 
+  },
+  myMessageRow: { 
+    justifyContent: "flex-end" 
+  },
+  theirMessageRow: { 
+    justifyContent: "flex-start" 
+  },
+  messageBubble: { 
+    padding: 12, 
+    borderRadius: 8, 
+    maxWidth: "80%" 
+  },
+  myMessage: { 
+    backgroundColor: "#dcf8c6", 
+    borderTopRightRadius: 0 
+  },
+  theirMessage: { 
+    backgroundColor: "#fff", 
+    borderTopLeftRadius: 0 
+  },
+  messageText: { 
+    color: "#000", 
+    fontSize: 16, 
+    lineHeight: 20 
+  },
   bottomWrapper: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 8,
     backgroundColor: "#fff",
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
   },
   inputWrapper: {
     flexDirection: "row",
@@ -272,11 +466,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#f2f2f2",
     borderRadius: 25,
     flex: 1,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    maxHeight: 100,
   },
-  textInput: { flex: 1, fontSize: 15, color: "#000", paddingVertical: 6 },
-  iconLeft: { marginRight: 5 },
-  iconRight: { marginLeft: 10 },
+  textInput: { 
+    flex: 1, 
+    fontSize: 16, 
+    color: "#000", 
+    paddingVertical: 4,
+    maxHeight: 80,
+  },
+  iconLeft: { 
+    marginRight: 8 
+  },
+  iconRight: { 
+    marginLeft: 8 
+  },
   micButton: {
     backgroundColor: "#25D366",
     width: 44,
@@ -285,6 +491,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginLeft: 8,
+  },
+  micButtonDisabled: {
+    backgroundColor: "#ccc",
   },
   modalOverlay: {
     flex: 1,
@@ -300,7 +509,17 @@ const styles = StyleSheet.create({
     width: 150,
     paddingVertical: 8,
     elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
-  menuItem: { paddingVertical: 10, paddingHorizontal: 15 },
-  menuText: { fontSize: 16, color: "#000" },
+  menuItem: { 
+    paddingVertical: 12, 
+    paddingHorizontal: 16 
+  },
+  menuText: { 
+    fontSize: 16, 
+    color: "#000" 
+  },
 });
