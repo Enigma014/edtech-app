@@ -294,7 +294,11 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     const isMyMessageOnLeft = !isSentByMe;
     return (
       <TouchableOpacity
-        onLongPress={() => handleDeleteMessage(item)}
+        onLongPress={() => {
+          if (isSentByMe) {
+            handleDeleteMessage(item.id);
+          }
+        }}
         activeOpacity={0.7}
       >
         <View
