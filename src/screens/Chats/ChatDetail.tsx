@@ -35,6 +35,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
   const [contactName, setContactName] = useState(name || "Unknown");
   const [contactData, setContactData] = useState<any>(null);
   const [groupData, setGroupData] = useState<any>(null);
+  const [isMember, setIsMember] = useState(true);
   const flatListRef = useRef<FlatList>(null);
 
   // generateChatId can throw if currentUserId is undefined, so guard it
@@ -115,6 +116,26 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     }
   }, [chatId, currentUserId]);
 
+  useEffect(() => {
+    if (!isGroup || !chatId) return;
+
+    const unsubscribe = firestore()
+      .collection("groups")
+      .doc(chatId)
+      .onSnapshot((doc) => {
+        if (!doc.exists) return;
+        const data = doc.data();
+        setGroupData(data);
+
+        const members = data?.members || [];
+        setIsMember(members.includes(currentUserId));
+      });
+
+    return () => unsubscribe();
+  }, [chatId, currentUserId, isGroup]);
+
+
+
   // Send message
   const handleSend = async () => {
     if (!message.trim() || !currentUserId) return;
@@ -140,12 +161,27 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     setMessages((prev) => [...prev, optimisticMsg]);
     const messageToSend = message;
     setMessage("");
-    console.log("Sending message:", currentUserId, "to", otherUserId, isGroup);
+    console.log(chatId,currentUserId,otherUserId,messageToSend,chatType);
     try {
       const chatId = isGroup 
       ? initialChatId
       : generateChatId(currentUserId, otherUserId);
-      await sendMessage(chatId, currentUserId, otherUserId, messageToSend, undefined, null, chatType);
+      if (isGroup) {
+        // Group message: receiverId = chatId (groupId)
+        await sendMessage(chatId, currentUserId, chatId, messageToSend, undefined, null, "group");
+      } else {
+        // 1:1 message
+        await sendMessage(
+          generateChatId(currentUserId, otherUserId),
+          currentUserId,
+          otherUserId,
+          messageToSend,
+          undefined,
+          null,
+          "chat"
+        );
+      }
+
       // listenMessages will pick up server-saved message and replace optimistic entry
     } catch (error) {
       console.error("Error sending message:", error);
@@ -274,7 +310,13 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
               { alignSelf: isMyMessageOnLeft ? "flex-start" : "flex-end" },
             ]}
           >
+            {isGroup && !isSentByMe && (
+              <Text style={{ fontSize: 12, color: "#555", marginBottom: 2 }}>
+                {item.senderName ||  ""}
+              </Text>
+            )}
             <Text style={styles.messageText}>{item.text}</Text>
+
           </View>
         </View>
       </TouchableOpacity>
@@ -328,6 +370,38 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
         />
 
         {/* Input Bar */}
+        {/* Input Bar */}
+{isGroup ? (
+  isMember ? (
+    <View style={styles.bottomWrapper}>
+      <View style={styles.inputWrapper}>
+        <Icon name="emoticon-outline" size={24} color="gray" style={styles.iconLeft} />
+        <TextInput
+          placeholder="Message"
+          placeholderTextColor="#777"
+          style={styles.textInput}
+          value={message}
+          onChangeText={setMessage}
+          multiline
+        />
+        <Icon name="paperclip" size={22} color="gray" style={styles.iconRight} />
+        <Icon name="camera-outline" size={22} color="gray" style={styles.iconRight} />
+      </View>
+
+      <TouchableOpacity
+        style={[styles.micButton, !message.trim() && styles.micButtonDisabled]}
+        onPress={handleSend}
+        disabled={!message.trim()}
+      >
+        <Icon name="send" size={22} color="#fff" />
+      </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.nonMemberNotice}>
+            <Text style={styles.nonMemberText}>You’re no longer a member of this group.</Text>
+          </View>
+        )
+      ) : (
         <View style={styles.bottomWrapper}>
           <View style={styles.inputWrapper}>
             <Icon name="emoticon-outline" size={24} color="gray" style={styles.iconLeft} />
@@ -342,7 +416,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
             <Icon name="paperclip" size={22} color="gray" style={styles.iconRight} />
             <Icon name="camera-outline" size={22} color="gray" style={styles.iconRight} />
           </View>
-
+      
           <TouchableOpacity
             style={[styles.micButton, !message.trim() && styles.micButtonDisabled]}
             onPress={handleSend}
@@ -351,6 +425,8 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
             <Icon name="send" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
+      )}
+
 
         {/* Options Menu */}
         <Modal
@@ -493,6 +569,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     maxHeight: 100,
+  },
+  nonMemberNotice: {
+    padding: 15,
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: "#ddd",
+    backgroundColor: "#f9f9f9",
+  },
+  nonMemberText: {
+    color: "#999",
+    fontSize: 14,
+    fontStyle: "italic",
   },
   textInput: {
     flex: 1,

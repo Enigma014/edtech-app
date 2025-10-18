@@ -52,32 +52,36 @@ const Chat = ({ navigation }: { navigation: any }) => {
   // Map of chatId -> Swipeable ref
   const swipeableRefs = useRef<Map<string, any>>(new Map());
 
-useEffect(() => {
-  const currentUser = auth().currentUser;
-  if (!currentUser) {
-    setLoading(false);
-    return;
-  }
-
-  const currentUid = currentUser.uid;
-
-  // Subscribe to personal chat summaries (1:1)
-  const unsubPersonal = subscribeToChatSummaries(currentUid, (personalChats) => {
-    // Subscribe to groups and merge
-    const unsubGroups = subscribeToGroups(currentUid, (groupsList) => {
-      const merged = [...personalChats, ...groupsList];
-      const sortedMerged = merged.sort(
-        (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)
-      );
-      setChats(sortedMerged);
+  useEffect(() => {
+    const currentUser = auth().currentUser;
+    if (!currentUser) {
       setLoading(false);
-    });
-  });
+      return;
+    }
 
-  return () => {
-    unsubPersonal?.();
-  };
-}, []);
+    const currentUid = currentUser.uid;
+
+    // Step 1️⃣: Subscribe to chat summaries
+    const unsubPersonal = subscribeToChatSummaries(currentUid, (personalAndGroupSummaries) => {
+      const summaryGroupIds = personalAndGroupSummaries
+        .filter((c) => c.isGroup)
+        .map((c) => c.id);
+
+      // Step 2️⃣: Subscribe to groups (excluding ones already in summaries)
+      const unsubGroups = subscribeToGroups(currentUid, (groupsList) => {
+        const merged = [...personalAndGroupSummaries, ...groupsList];
+        const sortedMerged = merged.sort(
+          (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)
+        );
+        setChats(sortedMerged);
+        setLoading(false);
+      }, summaryGroupIds);
+    });
+
+    return () => {
+      unsubPersonal?.();
+    };
+  }, []);
 
   // Delete chat (only for personal chats)
   const deleteChat = useCallback(

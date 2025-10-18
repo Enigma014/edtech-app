@@ -70,7 +70,8 @@ export async function fetchChatsForUser(
  */
 export function subscribeToGroups(
   currentUid: string,
-  onUpdate: (items: ChatItemType[]) => void
+  onUpdate: (items: ChatItemType[]) => void,
+  excludeIds: string[] = [] // 👈 new optional param
 ) {
   if (!currentUid) return () => {};
 
@@ -81,9 +82,9 @@ export function subscribeToGroups(
       (snapshot) => {
         const groups: ChatItemType[] = snapshot.docs
           .map((doc) => {
+            if (excludeIds.includes(doc.id)) return null; // 👈 skip groups already in summaries
+
             const data: any = doc.data() || {};
-            // optional: skip community groups depending on your UI
-            // if (data.isCommunityGroup === true) return null;
             return {
               id: doc.id,
               name: data.name || "Unnamed Group",
@@ -109,6 +110,7 @@ export function subscribeToGroups(
 
   return unsub;
 }
+
 
 /**
  * Subscribe to chatSummaries and resolve display names for 1:1 / group chats.
@@ -263,6 +265,7 @@ export function generateChatId(user1: string, user2: string) {
  * - chatType: "chat" | "group" | "community" (default "chat")
  * - optimisticCallback: optional UI callback to show optimistic message
  */
+
 export async function sendMessage(
   chatId: string,
   senderId: string,
@@ -272,81 +275,88 @@ export async function sendMessage(
   fileData: any = null,
   chatType: "chat" | "group" | "community" = "chat"
 ) {
-  if (!chatId || !senderId || !receiverId || (!text?.trim() && !fileData)) {
+  if (!chatId || !senderId || (!receiverId && chatType === "chat") || (!text?.trim() && !fileData)) {
     console.error("Missing required fields");
     return;
   }
 
-  // Message payload matching your desired shape
+  // ✅ Fetch sender info (name)
+  const senderSnap = await firestore().collection("users").doc(senderId).get();
+  const senderName = senderSnap.exists() ? senderSnap.data()?.name || "Unknown" : "Unknown";
+
   const messagePayload: any = {
-    chatType: chatType, // "chat" / "group" / "community"
+    chatType,
     senderId,
+    senderName, // 👈 include name
     receiverId,
     text: text?.trim() || "",
     createdAt: firestore.FieldValue.serverTimestamp(),
     isRead: false,
-    readAt: null,
     messageType: fileData ? "image" : "text",
   };
 
   if (fileData) {
     messagePayload.fileUrl = fileData.downloadURL;
     messagePayload.fileName = fileData.fileName || null;
-    messagePayload.fileType = fileData.fileType || null;
-    messagePayload.fileSize = fileData.fileSize || null;
   }
 
-  // Optimistic message for UI
   if (optimisticCallback) {
     optimisticCallback({
-      id: `temp-${Date.now()}-${Math.random()}`,
-      chatType: messagePayload.chatType,
-      senderId,
-      receiverId,
-      text: messagePayload.text,
+      id: `temp-${Date.now()}`,
+      ...messagePayload,
       createdAt: new Date(),
-      isRead: false,
-      readAt: null,
-      messageType: messagePayload.messageType,
-      fileUrl: messagePayload.fileUrl || null,
       isOptimistic: true,
     });
   }
 
-  try {
-    // Add message to chats/{chatId}/messages
-    const messagesRef = firestore()
-      .collection("chats")
-      .doc(chatId)
-      .collection("messages");
+  const messagesRef = firestore()
+    .collection("chats")
+    .doc(chatId)
+    .collection("messages");
 
-    const messageDocRef = await messagesRef.add(messagePayload);
+  const messageDocRef = await messagesRef.add(messagePayload);
 
-    // Update chatSummaries
-    const summaryRef = firestore().collection("chatSummaries").doc(chatId);
-    const lastMessageText = fileData ? "📷 Image" : (text || "").trim();
+  // ✅ Update chat summary (same logic as before)
+  const summaryRef = firestore().collection("chatSummaries").doc(chatId);
+  const lastMessageText = fileData ? "📷 Image" : (text || "").trim();
+
+  if (chatType === "group" || chatType === "community") {
+    const groupDoc = await firestore().collection("groups").doc(chatId).get();
+    const members = groupDoc.exists() ? groupDoc.data()?.members || [] : [];
 
     await summaryRef.set(
       {
-        chatType: chatType,
+        chatType,
+        groupId: chatId,
+        users: members,
+        lastMessage: lastMessageText,
+        senderName: senderName,
+        lastSender: senderId,
+        lastMessageId: messageDocRef.id,
+        lastTimestamp: firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } else {
+    await summaryRef.set(
+      {
+        chatType,
         users: [senderId, receiverId],
         lastMessage: lastMessageText,
         lastSender: senderId,
         lastReceiver: receiverId,
         lastMessageId: messageDocRef.id,
         lastTimestamp: firestore.FieldValue.serverTimestamp(),
-        // increment unread for receiver
         [`unread_${receiverId}`]: firestore.FieldValue.increment(1),
       },
       { merge: true }
     );
-
-    return messageDocRef.id;
-  } catch (error) {
-    console.error("Error sending message:", error);
-    throw error;
   }
+
+  return messageDocRef.id;
 }
+
+
 
 /** 
  * Listen to messages in real-time (keeps previous behavior).
@@ -370,6 +380,7 @@ export function listenMessages(chatId: string, callback: any, limitCount = 30) {
         chatType: data.chatType || "chat", 
         text: data.text,
         senderId: data.senderId,
+        senderName: data.senderName || "",
         receiverId: data.receiverId,
         createdAt: data.createdAt?.toDate?.() || new Date(),
         isRead: data.isRead || false,
@@ -409,6 +420,7 @@ export async function loadMoreMessages(chatId: string, lastDoc: any, limitCount 
       chatType: data.chatType || "chat",
       text: data.text,
       senderId: data.senderId,
+      senderName: data.senderName || "",
       receiverId: data.receiverId,
       createdAt: data.createdAt?.toDate?.() || new Date(),
       isRead: data.isRead || false,
