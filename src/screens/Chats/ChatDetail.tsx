@@ -57,107 +57,62 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
 
   // Fetch contact/group data
   useEffect(() => {
-    const fetchData = async () => {
-      if (name) return;
-      try {
-        if (isGroup) {
-          const groupDoc = await firestore().collection("groups").doc(chatId).get();
-
-          if (groupDoc.exists()) {
-            const data = groupDoc.data();
-            setGroupData(data);
-            setContactName(data?.name || "Unknown Group");
-          } else {
-            console.log("Group not found in database");
-            setContactName("Unknown Group");
-          }
-        } else {
-          let contactToFetch = contactId || receiverId;
-
-          if (!contactToFetch) {
-            console.log("No contact ID available");
-            return;
-          }
-
-          const contactDoc = await firestore().collection("users").doc(contactToFetch).get();
-
-          if (contactDoc.exists()) {
-            const data = contactDoc.data();
-            setContactName(data?.name || "Unknown");
-            setContactData(data);
-          } else {
-            console.log("Contact not found in database");
-            setContactName("Unknown User");
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setContactName("Error Loading");
-      }
-    };
-
-    fetchData();
-  }, [name, contactId, receiverId, isGroup, chatId]);
-
-  // Listen to real-time chat messages
-  useEffect(() => {
-    if (!chatId) return;
-    const unsubscribe = listenMessages(chatId, (msgs: any[], lastDoc: any) => {
-      setMessages(msgs);
-      setLastDoc(lastDoc);
-    });
-    return () => unsubscribe && unsubscribe();
-  }, [chatId]);
-
-  // Mark messages as read on entering chat
-  useEffect(() => {
-    if (chatId && currentUserId) {
-      markMessagesAsRead(chatId, currentUserId);
-    }
-  }, [chatId, currentUserId]);
-
-  // In ChatDetailScreen.tsx - Fix the group membership useEffect
-// SIMPLIFIED MEMBERSHIP CHECK - Replace your current useEffect
-useEffect(() => {
-  if (!isGroup || !chatId) return;
-
-  console.log("🔍 SIMPLE Membership check for:", chatId, "isCommunity:", isCommunity);
+    if (!isGroup || !chatId) return;
   
-  const unsubscribe = firestore()
-    .collection("groups")
-    .doc(chatId)
-    .onSnapshot((doc) => {
-      if (!doc.exists) {
-        console.log("❌ Group doesn't exist");
-        setIsMember(false);
-        return;
-      }
-      
-      const data = doc.data();
-      setGroupData(data);
-
-      const members = data?.members || [];
-      const userIsMember = members.includes(currentUserId);
-      
-      console.log("✅ Simple membership result:", {
-        groupId: chatId,
-        currentUserId,
-        totalMembers: members.length,
-        userIsMember: userIsMember,
-        membersList: members
-      });
-      
-      // SIMPLE FIX: Just use group membership, don't double-check community
-      setIsMember(userIsMember);
-      
-    }, (error) => {
-      console.error("❌ Error in group listener:", error);
-      // Default to true to avoid false negatives
-      setIsMember(true);
-    });
-
-  return () => unsubscribe();
-}, [chatId, currentUserId, isGroup, isCommunity]);
+    let unsubscribeMain: any = null;
+    let unsubscribeCommunity: any = null;
+  
+    const checkGroup = async () => {
+      unsubscribeMain = firestore()
+        .collection("groups")
+        .doc(chatId)
+        .onSnapshot(async (doc) => {
+          if (doc.exists) {
+            const data = doc.data();
+            setGroupData(data);
+  
+            const members = data?.members || [];
+            const isAdmin = data?.adminId === currentUserId;
+            const userIsMember = members.includes(currentUserId) || isAdmin;
+  
+            setIsMember(userIsMember);
+            console.log("✅ Main group membership:", userIsMember);
+          } else if (isCommunity && communityId) {
+            unsubscribeCommunity = firestore()
+              .collection("communities")
+              .doc(communityId)
+              .collection("groups")
+              .where("groupId", "==", chatId)
+              .onSnapshot((snapshot) => {
+                if (snapshot.empty) {
+                  setIsMember(false);
+                  return;
+                }
+  
+                const docData = snapshot.docs[0].data();
+                setGroupData(docData);
+  
+                const members = docData?.members || [];
+                const isAdmin = docData?.adminId === currentUserId;
+                const userIsMember = members.includes(currentUserId) || isAdmin;
+  
+                setIsMember(userIsMember);
+                console.log("✅ Community group membership:", userIsMember);
+              });
+          } else {
+            setIsMember(false);
+          }
+        });
+    };
+  
+    checkGroup();
+  
+    return () => {
+      if (unsubscribeMain) unsubscribeMain();
+      if (unsubscribeCommunity) unsubscribeCommunity();
+    };
+  }, [chatId, currentUserId, isGroup, isCommunity, communityId]);
+  
 
 
 

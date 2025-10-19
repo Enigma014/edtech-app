@@ -4,7 +4,8 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, ScrollView, Alert, Act
 import { authService, db } from '../../utils/firebaseConfig';
 import firestore from "@react-native-firebase/firestore";
 import auth from "@react-native-firebase/auth";
-
+import Ionicons from "react-native-vector-icons/Ionicons";
+import Icon from 'react-native-vector-icons/Ionicons';
 export default function ContactProfileScreen({ route, navigation }) {
   const { contactId } = route.params;
   const [contact, setContact] = useState(null);
@@ -221,6 +222,12 @@ export default function ContactProfileScreen({ route, navigation }) {
 
   return (
     <ScrollView style={styles.container}>
+      <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Icon name="arrow-back" size={24} color="#000" />
+        </TouchableOpacity>
       <View style={styles.profile}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
@@ -286,6 +293,10 @@ const styles = StyleSheet.create({
     padding: 15, 
     flex: 1,
     backgroundColor: '#fff'
+  },
+  backButton: {
+    padding: 8,
+    marginTop: 24,
   },
   loadingContainer: { 
     flex: 1, 

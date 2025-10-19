@@ -95,8 +95,22 @@ export default function CreateCommunityScreen({ navigation }) {
 
       // Add groups to the community's groups subcollection
       for (const group of defaultGroups) {
-        await db.collection("communities").doc(communityId).collection("groups").add(group);
+        const groupRef = await db
+          .collection("communities")
+          .doc(communityId)
+          .collection("groups")
+          .add({
+            ...group,
+            members: [currentUser.uid], // 👈 ensure admin is a member
+            adminId: currentUser.uid,   // 👈 track group admin
+          });
+      
+        // add groupId for easier lookups later
+        await groupRef.update({
+          groupId: groupRef.id,
+        });
       }
+      
 
       setLoading(false);
       Alert.alert("Success", "Community created successfully!");

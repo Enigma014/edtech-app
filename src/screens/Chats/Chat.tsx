@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,6 @@ import {
   Modal,
   TouchableWithoutFeedback,
   Alert,
-  Animated,
 } from "react-native";
 import firestore from "@react-native-firebase/firestore";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -17,19 +16,16 @@ import Navbar from "../../components/Navbar";
 import SearchBox from "../../components/SearchBox";
 import { theme } from "../../core/theme";
 import auth from "@react-native-firebase/auth";
-import { Swipeable } from "react-native-gesture-handler";
-// at top of Chat.tsx (or where your Chat component file is)
 import {
   subscribeToGroups,
   subscribeToChatSummaries,
 } from "../../utils/firebase/Chat";
 
-
 type ChatItemType = {
   id: string;
   name: string;
   lastMessage: string;
-  updatedAt: string; // ISO string for stable sorting
+  updatedAt: string;
   isGroup?: boolean;
   isCommunity?: boolean;
   otherUserId?: string;
@@ -47,10 +43,6 @@ const Chat = ({ navigation }: { navigation: any }) => {
   const [users, setUsers] = useState<UserItem[]>([]);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-
-  // Map of chatId -> Swipeable ref
-  const swipeableRefs = useRef<Map<string, any>>(new Map());
 
   useEffect(() => {
     const currentUser = auth().currentUser;
@@ -83,78 +75,71 @@ const Chat = ({ navigation }: { navigation: any }) => {
     };
   }, []);
 
-  // Delete chat (only for personal chats)
-  const deleteChat = useCallback(
-    async (chatId: string, isGroup: boolean) => {
-      if (isGroup) {
-        Alert.alert("Cannot Delete", "Group chats cannot be deleted");
-        return;
-      }
-
-      Alert.alert("Delete Chat", "Are you sure you want to delete this chat? This action cannot be undone.", [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              const currentUser = auth().currentUser;
-              if (!currentUser) return;
-
-              // Close the swipeable if open
-              const ref = swipeableRefs.current.get(chatId);
-              if (ref && typeof ref.close === "function") {
-                ref.close();
-              }
-
-              // Delete summary and chat document(s) if needed - BE CAREFUL:
-              // Here we delete the chatSummaries doc. If you have other cascade requirements, handle them server-side or add extra deletes.
-              await firestore().collection("chatSummaries").doc(chatId).delete();
-
-              // Optionally delete the chat doc (if you keep a separate chats collection)
-              // await firestore().collection("chats").doc(chatId).delete().catch(()=>{});
-
-              setChats((prevChats) => prevChats.filter((chat) => chat.id !== chatId));
-              console.log("✅ Chat deleted successfully");
-            } catch (error) {
-              console.error("❌ Error deleting chat:", error);
-              Alert.alert("Error", "Failed to delete chat");
-            }
-          },
-        },
-      ]);
-    },
-    []
-  );
-
-  // Render right actions for swipe
-  const renderRightActions = (progress: any, dragX: any, item: ChatItemType) => {
-    if (item.isGroup) return null; // don't show delete for groups
-
-    // Defensive interpolation
-    let trans: any = 0;
+  // Handle chat press - improved navigation
+  const handleChatPress = async (item: ChatItemType) => {
     try {
-      if (dragX && typeof dragX.interpolate === "function") {
-        trans = dragX.interpolate({
-          inputRange: [0, 50, 100, 101],
-          outputRange: [0, 0, 0, 1],
+      console.log("Chat pressed:", item);
+      
+      if (item.isGroup) {
+        // For group chats
+        navigation.navigate("ChatDetailScreen", {
+          chatId: item.id,
+          name: item.name,
+          isGroup: true,
         });
-      }
-    } catch (e) {
-      trans = 0;
-    }
+      } else {
+        // For personal chats - determine the other user's ID
+        const currentUser = auth().currentUser;
+        if (!currentUser) return;
 
-    return (
-      <TouchableOpacity style={styles.deleteButton} onPress={() => deleteChat(item.id, false)}>
-        <Animated.View style={[styles.deleteButtonContent, { transform: [{ translateX: trans as any }] }]}>
-          <Icon name="delete" size={24} color="#fff" />
-          <Text style={styles.deleteButtonText}>Delete</Text>
-        </Animated.View>
-      </TouchableOpacity>
-    );
+        const otherUserId = item.otherUserId || item.id;
+        
+        console.log("Navigating to personal chat with user:", otherUserId);
+        
+        // Fetch user data from Firestore first
+        const userDoc = await firestore()
+          .collection("users")
+          .doc(otherUserId)
+          .get();
+
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          console.log("User data found:", userData);
+          
+          navigation.navigate("ChatDetailScreen", {
+            chatId: item.id,
+            name: userData?.name || item.name,
+            isGroup: false,
+            contactId: otherUserId,
+            otherUserId: otherUserId,
+            contactInfo: userData,
+          });
+        } else {
+          console.log("User not found, using basic info");
+          // Fallback if user data not found
+          navigation.navigate("ChatDetailScreen", {
+            chatId: item.id,
+            name: item.name,
+            isGroup: false,
+            contactId: otherUserId,
+            otherUserId: otherUserId,
+          });
+        }
+      }
+    } catch (error) {
+      console.error("Error navigating to chat:", error);
+      // Fallback navigation
+      navigation.navigate("ChatDetailScreen", {
+        chatId: item.id,
+        name: item.name,
+        isGroup: item.isGroup || false,
+        contactId: item.isGroup ? undefined : item.id,
+        otherUserId: item.otherUserId || undefined,
+      });
+    }
   };
 
-  // Chat row component
+  // Chat row component - simplified without swipe
   const ChatListItem = ({ item }: { item: ChatItemType }) => {
     const displayTime = (() => {
       try {
@@ -167,54 +152,24 @@ const Chat = ({ navigation }: { navigation: any }) => {
     })();
 
     return (
-      <Swipeable
-        ref={(ref) => {
-          if (ref) {
-            swipeableRefs.current.set(item.id, ref);
-          } else {
-            swipeableRefs.current.delete(item.id);
-          }
-        }}
-        renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item)}
-        enabled={!item.isGroup}
-        rightThreshold={40}
-        onSwipeableRightOpen={() => {
-          // Close any other open swipeables
-          swipeableRefs.current.forEach((ref, chatId) => {
-            if (chatId !== item.id && ref && typeof ref.close === "function") {
-              ref.close();
-            }
-          });
-        }}
+      <TouchableOpacity
+        onPress={() => handleChatPress(item)}
+        style={styles.chatRow}
+        activeOpacity={0.7}
       >
-        <TouchableOpacity
-          onPress={() =>
-            navigation.navigate("ChatDetailScreen", {
-              chatId: item.id,
-              name: item.name,
-              isGroup: item.isGroup || false,
-              contactId: item.isGroup ? undefined : item.id,
-              otherUserId: item.otherUserId || undefined,
-            })
-
-          }
-          style={styles.chatRow}
-          activeOpacity={0.7}
-        >
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{item.name?.charAt(0)?.toUpperCase()}</Text>
-          </View>
-          <View style={styles.chatContent}>
-            <Text style={styles.chatName}>{item.name}</Text>
-            <Text style={styles.chatMessage} numberOfLines={1}>
-              {item.lastMessage}
-            </Text>
-          </View>
-          <Text style={styles.chatTime}>{displayTime}</Text>
-
-          {!item.isGroup && <Icon name="chevron-left" size={20} color="#ccc" style={styles.swipeHint} />}
-        </TouchableOpacity>
-      </Swipeable>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>
+            {item.name?.charAt(0)?.toUpperCase() || "U"}
+          </Text>
+        </View>
+        <View style={styles.chatContent}>
+          <Text style={styles.chatName}>{item.name}</Text>
+          <Text style={styles.chatMessage} numberOfLines={1}>
+            {item.lastMessage || "No messages yet"}
+          </Text>
+        </View>
+        <Text style={styles.chatTime}>{displayTime}</Text>
+      </TouchableOpacity>
     );
   };
 
@@ -222,7 +177,9 @@ const Chat = ({ navigation }: { navigation: any }) => {
     navigation.navigate("ListUsers");
   };
 
-  const renderChatItem = ({ item }: { item: ChatItemType }) => <ChatListItem item={item} />;
+  const renderChatItem = ({ item }: { item: ChatItemType }) => (
+    <ChatListItem item={item} />
+  );
 
   if (loading) {
     return (
@@ -237,7 +194,10 @@ const Chat = ({ navigation }: { navigation: any }) => {
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
         <Text style={styles.sectionTitle}>Chats</Text>
-        <TouchableOpacity style={{ padding: 10, marginRight: 10, marginTop: 8 }} onPress={() => setShowMenu(!showMenu)}>
+        <TouchableOpacity 
+          style={{ padding: 10, marginRight: 10, marginTop: 8 }} 
+          onPress={() => setShowMenu(!showMenu)}
+        >
           <Icon name="dots-vertical" size={28} color="gray" />
         </TouchableOpacity>
       </View>
@@ -258,9 +218,6 @@ const Chat = ({ navigation }: { navigation: any }) => {
                   }}
                 >
                   <Text>Create Group</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.menuItem} onPress={() => console.log("Create Community")}>
-                  <Text>Create Community</Text>
                 </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
@@ -404,28 +361,6 @@ const styles = StyleSheet.create({
     color: "#999",
     textAlign: "center",
     marginTop: 8,
-  },
-  // Swipe to delete styles
-  deleteButton: {
-    backgroundColor: "#FF3B30",
-    justifyContent: "center",
-    alignItems: "center",
-    width: 80,
-    height: "100%",
-  },
-  deleteButtonContent: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  deleteButtonText: {
-    color: "#fff",
-    fontSize: 12,
-    marginTop: 4,
-    fontWeight: "500",
-  },
-  swipeHint: {
-    marginLeft: 8,
-    opacity: 0.5,
   },
 });
 
