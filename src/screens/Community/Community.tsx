@@ -13,6 +13,8 @@ import Ionicons from "react-native-vector-icons/Ionicons";
 import { db } from "../../utils/firebaseConfig";
 import firestore from "@react-native-firebase/firestore";
 import auth from "@react-native-firebase/auth";
+import { StyleSheet } from 'react-native';
+
 
 const Community = ({ navigation }: { navigation: any }) => {
   const [communities, setCommunities] = useState([]);
@@ -89,22 +91,19 @@ const Community = ({ navigation }: { navigation: any }) => {
     }
   };
 
-  // ✅ ADDED: Function to delete community from parent component
   const handleDeleteCommunity = async (communityId: string) => {
     try {
-      // Delete the community document from Firestore
       await firestore()
         .collection("communities")
         .doc(communityId)
         .delete();
       
-      // ✅ IMPORTANT: Remove from local state to update UI immediately
       setCommunities(prev => prev.filter(community => community.id !== communityId));
       
       console.log("✅ Community deleted successfully:", communityId);
     } catch (error) {
       console.error("❌ Error deleting community:", error);
-      throw error; // Re-throw to handle in the card component
+      throw error;
     }
   };
 
@@ -124,103 +123,48 @@ const Community = ({ navigation }: { navigation: any }) => {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#f2f2f2", justifyContent: "center", alignItems: "center" }}>
+      <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#25D366" />
-        <Text style={{ marginTop: 10, color: "#666" }}>Loading your communities...</Text>
+        <Text style={styles.loadingText}>Loading your communities...</Text>
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#f2f2f2" }}>
-      <ScrollView style={{ flex: 1 }}>
+    <View style={styles.container}>
+      <ScrollView style={styles.scrollView}>
         {/* CREATE COMMUNITY CARD */}
-        <View
-          style={{
-            backgroundColor: "#fff",
-            paddingBottom: 8,
-            marginBottom: 10,
-            borderRadius: 12,
-            margin: 10,
-            marginTop: 20,
-            elevation: 2,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.1,
-            shadowRadius: 2,
-          }}
-        >
+        <View style={styles.createCommunityCard}>
           {/* Header */}
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              paddingHorizontal: 16,
-              paddingTop: 20,
-              paddingBottom: 12,
-            }}
-          >
-            <Text style={{ fontSize: 24, fontWeight: "600" }}>
-              Communities
-            </Text>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Communities</Text>
           </View>
 
           {/* New Community Button */}
           <TouchableOpacity
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingHorizontal: 16,
-              paddingVertical: 16,
-              backgroundColor: "#f8f8f8",
-              margin: 10,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: "#e0e0e0",
-              borderStyle: 'dashed',
-            }}
+            style={styles.newCommunityButton}
             onPress={() => navigation.navigate("CreateCommunityScreen")}
           >
-            <View
-              style={{
-                width: 50,
-                height: 50,
-                borderRadius: 25,
-                backgroundColor: "#25D366",
-                justifyContent: "center",
-                alignItems: "center",
-                marginRight: 12,
-              }}
-            >
-              <Icon name="add" size={28} color="#fff" />
+            <View style={styles.communityIconContainer}>
+              <View style={styles.communityIcon}>
+                <Ionicons name="people-outline" size={26} color="#000" />
+              </View>
+
+              {/* Small green + icon overlay */}
+              <View style={styles.addIconOverlay}>
+                <Ionicons name="add" size={14} color="#fff" />
+              </View>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontWeight: "600", color: "#25D366" }}>
-                Create New Community
-              </Text>
-              <Text style={{ fontSize: 12, color: "#666", marginTop: 4 }}>
-                Start your own community and invite members
-              </Text>
+
+            <View style={styles.newCommunityTextContainer}>
+              <Text style={styles.newCommunityTitle}>New Community</Text>
             </View>
-            <Icon name="chevron-forward" size={20} color="#25D366" />
           </TouchableOpacity>
         </View>
 
         {/* Your Communities Section */}
         {communities.length > 0 && (
-          <View style={{ paddingHorizontal: 10 }}>
-            <Text style={{ 
-              fontSize: 18, 
-              fontWeight: "600", 
-              marginBottom: 10, 
-              marginLeft: 10,
-              color: "#333"
-            }}>
-              Your Communities
-            </Text>
-            
-            {/* Communities List - PASS DELETE FUNCTION */}
+          <View style={styles.communitiesSection}>
             {communities.map((community) => (
               <CommunityCard 
                 key={community.id} 
@@ -228,7 +172,7 @@ const Community = ({ navigation }: { navigation: any }) => {
                 navigation={navigation} 
                 formatDate={formatDate}
                 currentUser={currentUser}
-                onDeleteCommunity={handleDeleteCommunity} // ✅ PASS DELETE FUNCTION
+                onDeleteCommunity={handleDeleteCommunity}
               />
             ))}
           </View>
@@ -236,72 +180,25 @@ const Community = ({ navigation }: { navigation: any }) => {
 
         {/* Empty State */}
         {communities.length === 0 && (
-          <View style={{ 
-            backgroundColor: "#fff", 
-            padding: 30, 
-            alignItems: "center", 
-            margin: 10, 
-            borderRadius: 12,
-            elevation: 2,
-            shadowColor: "#000",
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.1,
-            shadowRadius: 2,
-          }}>
-            <View style={{
-              width: 80,
-              height: 80,
-              borderRadius: 40,
-              backgroundColor: "#f0f8f0",
-              justifyContent: "center",
-              alignItems: "center",
-              marginBottom: 20,
-            }}>
+          <View style={styles.emptyState}>
+            <View style={styles.emptyStateIcon}>
               <Ionicons name="people-outline" size={40} color="#25D366" />
             </View>
-            <Text style={{ 
-              fontSize: 20, 
-              color: "#333", 
-              marginBottom: 8, 
-              textAlign: "center",
-              fontWeight: "600"
-            }}>
-              Welcome to Communities!
-            </Text>
-            <Text style={{ 
-              fontSize: 14, 
-              color: "#666", 
-              marginBottom: 20, 
-              textAlign: "center",
-              lineHeight: 20
-            }}>
+            <Text style={styles.emptyStateTitle}>Welcome to Communities!</Text>
+            <Text style={styles.emptyStateDescription}>
               Communities bring people together around shared interests.{"\n"}
               Create your first community to get started.
             </Text>
             
             <TouchableOpacity
-              style={{
-                backgroundColor: "#25D366",
-                paddingHorizontal: 24,
-                paddingVertical: 12,
-                borderRadius: 25,
-                flexDirection: "row",
-                alignItems: "center",
-              }}
+              style={styles.createFirstButton}
               onPress={() => navigation.navigate("CreateCommunityScreen")}
             >
-              <Icon name="add" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
-                Create Your First Community
-              </Text>
+              <Icon name="add" size={20} color="#fff" style={styles.buttonIcon} />
+              <Text style={styles.createFirstButtonText}>Create Your First Community</Text>
             </TouchableOpacity>
             
-            <Text style={{ 
-              fontSize: 12, 
-              color: "#999", 
-              marginTop: 16, 
-              textAlign: "center"
-            }}>
+            <Text style={styles.emptyStateHint}>
               You'll be the admin and can add groups and members
             </Text>
           </View>
@@ -314,14 +211,13 @@ const Community = ({ navigation }: { navigation: any }) => {
   );
 };
 
-// ✅ UPDATED: CommunityCard with proper delete functionality
 const CommunityCard = ({ community, navigation, formatDate, currentUser, onDeleteCommunity }) => {
   const [communityGroups, setCommunityGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAllGroups, setShowAllGroups] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [deleting, setDeleting] = useState(false); // ✅ ADDED: Loading state for delete
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!community?.id || !currentUser?.uid) return;
@@ -345,7 +241,6 @@ const CommunityCard = ({ community, navigation, formatDate, currentUser, onDelet
 
     checkAdminStatus();
 
-    // Load community groups
     const unsubscribe = db
       .collection("communities")
       .doc(community.id)
@@ -372,7 +267,6 @@ const CommunityCard = ({ community, navigation, formatDate, currentUser, onDelet
     return () => unsubscribe?.();
   }, [community.id, currentUser?.uid]);
 
-  // ✅ UPDATED: Delete community function
   const deleteCommunity = async () => {
     if (!isAdmin) {
       Alert.alert("Access Denied", "Only community admin can delete the community");
@@ -392,10 +286,7 @@ const CommunityCard = ({ community, navigation, formatDate, currentUser, onDelet
               setDeleting(true);
               setShowMenu(false);
               
-              // ✅ CALL PARENT DELETE FUNCTION
               await onDeleteCommunity(community.id);
-              
-              // Success message is handled by parent component
             } catch (error) {
               console.error("Error deleting community:", error);
               Alert.alert("Error", "Failed to delete community. Please try again.");
@@ -408,7 +299,6 @@ const CommunityCard = ({ community, navigation, formatDate, currentUser, onDelet
     );
   };
 
-  // GET DISPLAY GROUPS - ANNOUNCEMENTS & GENERAL FIRST
   const getDisplayGroups = () => {
     const announcementsGroup = communityGroups.find(g => g.isAnnouncement);
     const generalGroup = communityGroups.find(g => !g.isAnnouncement && g.name === "General");
@@ -436,9 +326,7 @@ const CommunityCard = ({ community, navigation, formatDate, currentUser, onDelet
         >
           <Ionicons name="people-outline" size={28} color="#000" />
           <View style={styles.communityTitleContainer}>
-            <Text style={styles.communityName}>
-              {community.name}
-            </Text>
+            <Text style={styles.communityName}>{community.name}</Text>
           </View>
         </TouchableOpacity>
 
@@ -446,7 +334,7 @@ const CommunityCard = ({ community, navigation, formatDate, currentUser, onDelet
         <TouchableOpacity
           style={styles.menuButton}
           onPress={() => setShowMenu(!showMenu)}
-          disabled={deleting} // ✅ DISABLE WHILE DELETING
+          disabled={deleting}
         >
           {deleting ? (
             <ActivityIndicator size="small" color="#666" />
@@ -461,7 +349,7 @@ const CommunityCard = ({ community, navigation, formatDate, currentUser, onDelet
             {isAdmin && (
               <TouchableOpacity
                 style={styles.menuItem}
-                onPress={deleteCommunity} // ✅ USE UPDATED FUNCTION
+                onPress={deleteCommunity}
               >
                 <Ionicons name="trash-outline" size={18} color="#ff3b30" />
                 <Text style={styles.deleteMenuText}>Delete Community</Text>
@@ -508,9 +396,9 @@ const CommunityCard = ({ community, navigation, formatDate, currentUser, onDelet
 
       {/* Loading and Empty States */}
       {groupsLoading && communityGroups.length === 0 && (
-        <View style={styles.loadingContainer}>
+        <View style={styles.groupsLoadingContainer}>
           <ActivityIndicator size="small" color="#25D366" />
-          <Text style={styles.loadingText}>Loading groups...</Text>
+          <Text style={styles.groupsLoadingText}>Loading groups...</Text>
         </View>
       )}
 
@@ -548,7 +436,6 @@ const CommunityCard = ({ community, navigation, formatDate, currentUser, onDelet
   );
 };
 
-// GroupListItem component remains the same
 const GroupListItem = ({ group, community, navigation, formatDate, isAnnouncements, isGeneral, isAdmin }) => {
   const iconName = isAnnouncements ? "megaphone-outline" : "people-outline";
   const backgroundColor = isAnnouncements ? "#d4f8d4" : "#e6e6e6";
@@ -596,8 +483,157 @@ const GroupListItem = ({ group, community, navigation, formatDate, isAnnouncemen
   );
 };  
 
-// Styles remain the same as previous version
-const styles = {
+const styles = StyleSheet.create({
+  // Main container styles
+  container: {
+    flex: 1,
+    backgroundColor: "#f2f2f2"
+  },
+  scrollView: {
+    flex: 1
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#f2f2f2",
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  loadingText: {
+    marginTop: 10,
+    color: "#666"
+  },
+
+  // Create Community Card styles
+  createCommunityCard: {
+    backgroundColor: "#fff",
+    paddingBottom: 12,
+    marginBottom: 10,
+    margin: 0,
+    marginTop: 0,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 12
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "400",
+    marginTop: 24,
+  },
+  newCommunityButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    margin: 10,
+    borderRadius: 10,
+    borderWidth: 0
+  },
+  communityIconContainer: {
+    marginRight: 12
+  },
+  communityIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#EDEDED",
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  addIconOverlay: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    backgroundColor: "#25D366",
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  newCommunityTextContainer: {
+    flex: 1
+  },
+  newCommunityTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#000"
+  },
+
+  // Communities section
+  communitiesSection: {
+    paddingHorizontal: 10
+  },
+
+  // Empty state styles
+  emptyState: {
+    backgroundColor: "#fff",
+    padding: 30,
+    alignItems: "center",
+    margin: 10,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2
+  },
+  emptyStateIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "#f0f8f0",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 20
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    color: "#333",
+    marginBottom: 8,
+    textAlign: "center",
+    fontWeight: "600"
+  },
+  emptyStateDescription: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 20,
+    textAlign: "center",
+    lineHeight: 20
+  },
+  createFirstButton: {
+    backgroundColor: "#25D366",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 25,
+    flexDirection: "row",
+    alignItems: "center"
+  },
+  buttonIcon: {
+    marginRight: 8
+  },
+  createFirstButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600"
+  },
+  emptyStateHint: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 16,
+    textAlign: "center"
+  },
+
+  // Community Card styles
   communityCard: {
     backgroundColor: "#fff",
     paddingHorizontal: 16,
@@ -609,28 +645,28 @@ const styles = {
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
-    position: 'relative',
+    position: 'relative'
   },
   communityHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "space-between"
   },
   communityTitle: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
+    flex: 1
   },
   communityTitleContainer: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 12
   },
   communityName: {
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "600"
   },
   menuButton: {
-    padding: 8,
+    padding: 8
   },
   menuOptions: {
     position: 'absolute',
@@ -644,25 +680,25 @@ const styles = {
     shadowOpacity: 0.25,
     shadowRadius: 4,
     zIndex: 1000,
-    minWidth: 180,
+    minWidth: 180
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: '#f0f0f0'
   },
   menuText: {
     marginLeft: 8,
     fontSize: 14,
-    color: '#333',
+    color: '#333'
   },
   deleteMenuText: {
     marginLeft: 8,
     fontSize: 14,
     color: '#ff3b30',
-    fontWeight: '500',
+    fontWeight: '500'
   },
   menuOverlay: {
     position: 'absolute',
@@ -670,22 +706,24 @@ const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 999,
+    zIndex: 999
   },
   divider: {
     height: 1,
     backgroundColor: "#f0f0f0",
-    marginVertical: 16,
+    marginVertical: 16
   },
+
+  // Group List Item styles
   groupItemContainer: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "center"
   },
   groupItem: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
-    flex: 1,
+    flex: 1
   },
   groupIcon: {
     width: 40,
@@ -693,56 +731,57 @@ const styles = {
     borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 12
   },
   groupInfo: {
     flex: 1,
-    marginRight: 8,
+    marginRight: 8
   },
   groupName: {
     fontWeight: "500",
     fontSize: 16,
-    marginBottom: 2,
+    marginBottom: 2
   },
   groupMessage: {
     color: "#666",
-    fontSize: 14,
+    fontSize: 14
   },
   groupDateContainer: {
     minWidth: 70,
-    alignItems: "flex-end",
+    alignItems: "flex-end"
   },
   groupDate: {
     fontSize: 12,
     color: "#666",
-    textAlign: "right",
+    textAlign: "right"
   },
-  loadingContainer: {
+
+  // Groups loading and empty states
+  groupsLoadingContainer: {
     alignItems: "center",
-    paddingVertical: 20,
+    paddingVertical: 20
   },
-  loadingText: {
+  groupsLoadingText: {
     color: "#666",
     marginTop: 8,
-    fontSize: 14,
+    fontSize: 14
   },
   emptyGroupsContainer: {
     alignItems: "center",
-    paddingVertical: 20,
+    paddingVertical: 20
   },
   emptyGroupsText: {
     color: "#666",
     marginTop: 8,
     textAlign: 'center',
     fontSize: 14,
-    lineHeight: 20,
+    lineHeight: 20
   },
   adminHintText: {
     fontSize: 12,
     color: '#25D366',
-    fontWeight: '500',
+    fontWeight: '500'
   },
-  
   viewMoreButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -750,14 +789,16 @@ const styles = {
     paddingVertical: 12,
     marginTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
+    borderTopColor: "#f0f0f0"
   },
   viewMoreText: {
     color: "#25D366",
     fontWeight: "500",
     fontSize: 14,
-    marginRight: 4,
-  },
-};
+    marginRight: 4
+  }
+});
+
+
 
 export default Community;

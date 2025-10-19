@@ -110,6 +110,7 @@ const ProfileScreen = ({ route, navigation }) => {
       );
 
       Alert.alert("✅ Profile picture updated!");
+
     } catch (error) {
       console.error("Upload error:", error);
       Alert.alert("❌ Error uploading image");
@@ -194,7 +195,7 @@ const ProfileScreen = ({ route, navigation }) => {
       </View>
 
       {/* Save Button */}
-      <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+      <TouchableOpacity style={styles.saveButton} onPress={()=>{handleSave();navigation.navigate('SettingsScreen')}}>
         <Text style={styles.saveButtonText}>Save Changes</Text>
       </TouchableOpacity>
 

@@ -85,6 +85,9 @@ export function subscribeToGroups(
             if (excludeIds.includes(doc.id)) return null; // 👈 skip groups already in summaries
 
             const data: any = doc.data() || {};
+            if (data.communityId) {
+              return null; // Skip community groups
+            }
             return {
               id: doc.id,
               name: data.name || "Unnamed Group",

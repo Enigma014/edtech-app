@@ -1003,12 +1003,12 @@ const styles = StyleSheet.create({
   },
   adminBadge: {
     fontSize: 10,
-    color: "#FFD700",
-    backgroundColor: "#2C2C2C",
+    color: "#000",
+
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 8,
-    fontWeight: "bold"
+
+
   },
   statsContainer: {
     flexDirection: 'row',

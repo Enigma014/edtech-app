@@ -11,6 +11,7 @@ import {
 import { authService } from "../../utils/firebaseConfig";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import firestore from "@react-native-firebase/firestore";
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 interface User {
   id: string;
@@ -195,7 +196,7 @@ export default function GroupCreationScreen() {
     if (success) {
       return {
         disabled: true,
-        text: communityId ? "✓ Added to Community" : "✓ Group Created!",
+        text: communityId ? "✓ Added to Community" : "Group Created!",
         style: styles.createButtonSuccess
       };
     }
@@ -218,11 +219,21 @@ export default function GroupCreationScreen() {
   const buttonState = getButtonState();
 
   return (
+
     <View style={styles.container}>
+      <View style={styles.header}>
+      <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#000" />
+          </TouchableOpacity>
       <Text style={styles.title}>
         {communityId ? "New Community Group" : "New Group"}
       </Text>
 
+      </View>
+      
       {/* Group Image */}
       <TouchableOpacity 
         style={styles.imageContainer}
@@ -257,11 +268,7 @@ export default function GroupCreationScreen() {
           {selectedUsersData.map((user: User) => user.name).join(", ")}
           {selectedUsersData.length > 0 ? " and you" : "You"}
         </Text>
-        {communityId && (
-          <Text style={styles.communityNote}>
-            🏢 This group will be added using the same pattern as "Add Existing Groups"
-          </Text>
-        )}
+        
         {/* {success && ( // 🆕 Success message
           <Text style={styles.successNote}>
             ✓ {communityId ? "Group added to community!" : "Group created successfully! Redirecting..."}
@@ -287,14 +294,22 @@ const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     padding: 20,
-    backgroundColor: "#ECE5DD"
+    backgroundColor: "#ECE5DD",
+    
   },
+  header: {
+    flexDirection: "row",
+},
   title: {
     fontSize: 22,
-    fontWeight: "bold",
-    color: "#075E54",
-    textAlign: "center",
+    color: "#000",
+    textAlign: "left",
     marginBottom: 30,
+    marginTop: 20,
+  },
+  backButton: { 
+    padding: 8,
+    marginTop: 18,
   },
   imageContainer: {
     alignSelf: "center",

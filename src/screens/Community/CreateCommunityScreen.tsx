@@ -113,7 +113,7 @@ export default function CreateCommunityScreen({ navigation }) {
     <View style={styles.container}>
       <ScrollView>
         <Text style={styles.title}>New community</Text>
-        <Text style={styles.subtitle}>Create a new community with announcement and general groups</Text>
+        {/* <Text style={styles.subtitle}>Create a new community with announcement and general groups</Text> */}
 
         {/* Community Photo */}
         <TouchableOpacity onPress={pickImage} style={styles.imageContainer}>
@@ -156,7 +156,7 @@ export default function CreateCommunityScreen({ navigation }) {
         <Text style={styles.counter}>{description.length}/2048</Text>
 
         {/* Info Section */}
-        <View style={styles.infoBox}>
+        {/* <View style={styles.infoBox}>
           <Text style={styles.infoTitle}>Default Groups</Text>
           <Text style={styles.infoText}>
             • <Text style={styles.bold}>Announcements:</Text> Only admins can post
@@ -164,7 +164,7 @@ export default function CreateCommunityScreen({ navigation }) {
           <Text style={styles.infoText}>
             • <Text style={styles.bold}>General:</Text> All members can chat
           </Text>
-        </View>
+        </View> */}
       </ScrollView>
 
       {/* Create Button */}
@@ -194,8 +194,9 @@ const styles = StyleSheet.create({
   },
   title: { 
     fontSize: 24, 
-    fontWeight: "bold", 
-    marginBottom: 5,
+    fontWeight: "400", 
+    marginTop: 24,
+    marginBottom: 12,
     color: "#000"
   },
   subtitle: { 

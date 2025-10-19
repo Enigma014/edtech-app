@@ -11,6 +11,7 @@ import firestore from "@react-native-firebase/firestore";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import auth from "@react-native-firebase/auth";
+import Icon from "react-native-vector-icons/Ionicons";
 
 type RootStackParamList = {
   GroupCreationScreen: { 
@@ -41,7 +42,9 @@ export default function SelectMembersScreen() {
   useEffect(() => {
     if (!currentUserId) return;
 
-    const fetchData = async () => {
+    let unsubscribe: (() => void) | null = null;
+
+    const initializeData = async () => {
       try {
         // Check admin status for community
         if (communityId) {
@@ -65,7 +68,7 @@ export default function SelectMembersScreen() {
         }
 
         // Fetch users (excluding current user)
-        const unsub = firestore().collection("users").onSnapshot(snapshot => {
+        unsubscribe = firestore().collection("users").onSnapshot(snapshot => {
           const allUsers = snapshot.docs.map(doc => ({ 
             id: doc.id, 
             ...doc.data() 
@@ -79,21 +82,20 @@ export default function SelectMembersScreen() {
           });
           
           setUsers(filteredUsers);
+          setLoading(false);
         });
-
-        return unsub;
 
       } catch (error) {
         console.error("Error fetching data:", error);
         Alert.alert("Error", "Failed to load users");
         navigation.goBack();
-      } finally {
         setLoading(false);
       }
     };
 
-    const unsubscribe = fetchData();
+    initializeData();
 
+    // 🆕 FIXED: Cleanup function that properly handles the unsubscribe
     return () => {
       if (unsubscribe) {
         unsubscribe();
@@ -145,15 +147,19 @@ export default function SelectMembersScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>
-        {communityId ? "Select Community Members" : "Select Members"}
-      </Text>
-      
-      {communityId && (
-        <Text style={styles.communityNote}>
-          🏢 Creating group for community (Admin Only)
+      {/* Header with Back Button */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Icon name="arrow-back" size={24} color="#000" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          {communityId ? "Select Community Members" : "Select Members"}
         </Text>
-      )}
+        <View style={styles.headerSpacer} />
+      </View>
       
       <Text style={styles.subtitle}>
         {selected.length} member{selected.length !== 1 ? 's' : ''} selected
@@ -161,7 +167,7 @@ export default function SelectMembersScreen() {
       
       <FlatList
         data={users}
-        keyExtractor={item => item.id || item.uid} // ✅ Handle both id and uid
+        keyExtractor={item => item.id || item.uid}
         renderItem={({ item }) => (
           <TouchableOpacity
             onPress={() => toggleSelect(item.id || item.uid)}
@@ -214,7 +220,6 @@ export default function SelectMembersScreen() {
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
-    padding: 20,
     backgroundColor: "#ECE5DD"
   },
   loadingContainer: {
@@ -223,19 +228,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#ECE5DD"
   },
-  title: {
+  // Header Styles
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  backButton: {
+    padding: 8,
+    marginTop: 24,
+  },
+  headerTitle: {
     fontSize: 20,
-    fontWeight: "bold",
-    color: "#25D366",
-    marginTop: 10,
-    marginBottom: 5,
-    textAlign: "center",
+    fontWeight: "400",
+    color: "#000",
+    textAlign: "left",
+    marginTop: 24,
+    flex: 1,
+  },
+  headerSpacer: {
+    width: 40,
   },
   subtitle: {
     fontSize: 14,
     color: "#25D366",
     marginBottom: 20,
     textAlign: "center",
+    paddingHorizontal: 20,
+    paddingTop: 16,
   },
   communityNote: {
     fontSize: 12,
@@ -249,6 +274,7 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
+    paddingHorizontal: 20,
   },
   userItem: {
     padding: 15,
@@ -282,7 +308,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "flex-end",
-    marginTop: 10,
+    margin: 20,
     elevation: 3,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },

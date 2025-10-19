@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import Ionicons from "react-native-vector-icons/Ionicons";
 import firestore from '@react-native-firebase/firestore';
 
 export default function ManageGroupsScreen({ route, navigation }) {
@@ -23,6 +24,18 @@ export default function ManageGroupsScreen({ route, navigation }) {
   if (!id) {
     return (
       <View style={styles.container}>
+        {/* Header with Back Button */}
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Manage Groups</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        
         <View style={styles.errorContainer}>
           <Icon name="alert-circle-outline" size={50} color="#ff3b30" />
           <Text style={styles.errorText}>Community Information Missing</Text>
@@ -30,10 +43,10 @@ export default function ManageGroupsScreen({ route, navigation }) {
             The community ID was not provided. Please go back and try again.
           </Text>
           <TouchableOpacity 
-            style={styles.backButton} 
+            style={styles.backActionButton} 
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.backButtonText}>Go Back</Text>
+            <Text style={styles.backActionButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -122,9 +135,23 @@ export default function ManageGroupsScreen({ route, navigation }) {
   // Show loading state
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator color="#00a884" size="large" />
-        <Text style={styles.loadingText}>Loading groups...</Text>
+      <View style={styles.container}>
+        {/* Header with Back Button */}
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Manage Groups</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator color="#00a884" size="large" />
+          <Text style={styles.loadingText}>Loading groups...</Text>
+        </View>
       </View>
     );
   }
@@ -133,7 +160,19 @@ export default function ManageGroupsScreen({ route, navigation }) {
   if (error) {
     return (
       <View style={styles.container}>
-        <View style={styles.errorContainer}>
+        {/* Header with Back Button */}
+        <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#000" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Manage Groups</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+        
+        <View style={styles.errorStateContainer}>
           <Icon name="wifi-off" size={50} color="#ff9500" />
           <Text style={styles.errorText}>Connection Error</Text>
           <Text style={styles.errorSubtext}>{error}</Text>
@@ -153,86 +192,95 @@ export default function ManageGroupsScreen({ route, navigation }) {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.headerContainer}>
-        <Text style={styles.header}>Manage Groups</Text>
-        <Text style={styles.subHeader}>
-          {groups.length} group{groups.length !== 1 ? 's' : ''}
-        </Text>
+      {/* Header with Back Button */}
+      <View style={styles.header}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#000" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Manage Groups</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
-      {/* Action Buttons */}
-      <View style={styles.actionsContainer}>
-        <TouchableOpacity style={styles.actionRow} onPress={createNewGroup}>
-          <View style={styles.actionIcon}>
-            <Icon name="account-group" size={22} color="#fff" />
-          </View>
-          <Text style={styles.actionText}>Create New Group</Text>
-        </TouchableOpacity>
+      {/* Content */}
+      <View style={styles.content}>
+        {/* Subheader */}
+        <View style={styles.subHeaderContainer}>
+          <Text style={styles.subHeader}>
+            {groups.length} group{groups.length !== 1 ? 's' : ''}
+          </Text>
+        </View>
 
-        <TouchableOpacity style={styles.actionRow} onPress={addExistingGroup}>
-          <View style={[styles.actionIcon, { backgroundColor: "#34c759" }]}>
-            <Icon name="plus" size={22} color="#fff" />
-          </View>
-          <Text style={styles.actionText}>Add Existing Groups</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Action Buttons */}
+        {/* Action Buttons */}
+<View style={styles.actionsContainer}>
+  <TouchableOpacity style={styles.actionRow} onPress={createNewGroup}>
+    <View style={styles.actionIcon}>
+      <Icon name="account-group" size={22} color="#fff" />
+    </View>
+    <Text style={styles.actionText}>Create New Group</Text>
+  </TouchableOpacity>
 
-      {/* Info Text */}
-      <Text style={styles.infoText}>
-        Members can suggest existing groups for admin approval and add new groups directly.{" "}
-        <Text style={styles.linkText}>View in Community settings</Text>
-      </Text>
+  <TouchableOpacity style={styles.actionRow} onPress={addExistingGroup}>
+    <View style={[styles.actionIcon]}>
+      <Ionicons name="add" size={22} color="#fff" />
+    </View>
+    <Text style={styles.actionText}>Add Existing Groups</Text>
+  </TouchableOpacity>
+</View>
 
-      {/* Groups List */}
-      <View style={styles.groupsContainer}>
-        <Text style={styles.sectionTitle}>Groups in this Community</Text>
-        
-        <FlatList
-          data={groups}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => {
-            const isDefaultGroup = item.isAnnouncement || item.name === "General";
-            
-            return (
-              <View style={styles.groupRow}>
-                <View style={styles.groupIcon}>
-                  <Icon
-                    name={item.isAnnouncement ? "bullhorn" : "chat-outline"}
-                    size={22}
-                    color="#333"
-                  />
+        {/* Groups List */}
+        <View style={styles.groupsContainer}>
+          <Text style={styles.sectionTitle}>Groups in this Community</Text>
+          
+          <FlatList
+            data={groups}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => {
+              const isDefaultGroup = item.isAnnouncement || item.name === "General";
+              
+              return (
+                <View style={styles.groupRow}>
+                  <View style={styles.groupIcon}>
+                    <Icon
+                      name={item.isAnnouncement ? "bullhorn" : "chat-outline"}
+                      size={22}
+                      color="#333"
+                    />
+                  </View>
+                  <View style={styles.groupInfo}>
+                    <Text style={styles.groupName}>{item.name}</Text>
+                    <Text style={styles.groupSub}>
+                      {item.isAnnouncement ? "Announcement Group" : "Discussion Group"}
+                      {isDefaultGroup && " • Default"}
+                    </Text>
+                  </View>
+                  {/* Only show delete button for non-default groups */}
+                  {!isDefaultGroup && (
+                    <TouchableOpacity 
+                      style={styles.deleteButton}
+                      onPress={() => deleteGroup(item.id, item.name, item.isAnnouncement)}
+                    >
+                      <Icon name="close" size={20} color="#999" />
+                    </TouchableOpacity>
+                  )}
                 </View>
-                <View style={styles.groupInfo}>
-                  <Text style={styles.groupName}>{item.name}</Text>
-                  <Text style={styles.groupSub}>
-                    {item.isAnnouncement ? "Announcement Group" : "Discussion Group"}
-                    {isDefaultGroup && " • Default"}
-                  </Text>
-                </View>
-                {/* Only show delete button for non-default groups */}
-                {!isDefaultGroup && (
-                  <TouchableOpacity 
-                    style={styles.deleteButton}
-                    onPress={() => deleteGroup(item.id, item.name, item.isAnnouncement)}
-                  >
-                    <Icon name="close" size={20} color="#999" />
-                  </TouchableOpacity>
-                )}
+              );
+            }}
+            ListEmptyComponent={
+              <View style={styles.emptyContainer}>
+                <Icon name="account-group-outline" size={60} color="#ccc" />
+                <Text style={styles.emptyText}>No groups yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Create your first group to get started
+                </Text>
               </View>
-            );
-          }}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Icon name="account-group-outline" size={60} color="#ccc" />
-              <Text style={styles.emptyText}>No groups yet</Text>
-              <Text style={styles.emptySubtext}>
-                Create your first group to get started
-              </Text>
-            </View>
-          }
-          showsVerticalScrollIndicator={false}
-        />
+            }
+            showsVerticalScrollIndicator={false}
+          />
+        </View>
       </View>
     </View>
   );
@@ -243,26 +291,47 @@ const styles = StyleSheet.create({
     flex: 1, 
     backgroundColor: "#fff", 
   },
-  headerContainer: {
-    paddingHorizontal: 15,
-    paddingTop: 15,
-    paddingBottom: 10,
+  // Header Styles
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
   },
-  header: { 
-    fontSize: 22, 
-    fontWeight: "700", 
+  backButton: {
+    padding: 8,
+    marginTop: 24,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "400",
     color: "#000",
+    textAlign: "left",
+    flex: 1,
+    marginTop: 24,
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  content: {
+    flex: 1,
+  },
+  subHeaderContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   subHeader: { 
     color: "#666", 
     fontSize: 14,
-    marginTop: 2,
   },
   actionsContainer: {
-    paddingHorizontal: 15,
-    paddingVertical: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
   },
@@ -303,8 +372,8 @@ const styles = StyleSheet.create({
   },
   groupsContainer: {
     flex: 1,
-    paddingHorizontal: 15,
-    paddingTop: 15,
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   sectionTitle: {
     fontSize: 16,
@@ -379,6 +448,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 40,
   },
+  errorStateContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 40,
+  },
   errorText: {
     fontSize: 18,
     fontWeight: "600",
@@ -393,14 +468,14 @@ const styles = StyleSheet.create({
     marginTop: 8,
     lineHeight: 20,
   },
-  backButton: {
+  backActionButton: {
     backgroundColor: '#00a884',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
     marginTop: 20,
   },
-  backButtonText: {
+  backActionButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

@@ -116,23 +116,48 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     }
   }, [chatId, currentUserId]);
 
-  useEffect(() => {
-    if (!isGroup || !chatId) return;
+  // In ChatDetailScreen.tsx - Fix the group membership useEffect
+// SIMPLIFIED MEMBERSHIP CHECK - Replace your current useEffect
+useEffect(() => {
+  if (!isGroup || !chatId) return;
 
-    const unsubscribe = firestore()
-      .collection("groups")
-      .doc(chatId)
-      .onSnapshot((doc) => {
-        if (!doc.exists) return;
-        const data = doc.data();
-        setGroupData(data);
+  console.log("🔍 SIMPLE Membership check for:", chatId, "isCommunity:", isCommunity);
+  
+  const unsubscribe = firestore()
+    .collection("groups")
+    .doc(chatId)
+    .onSnapshot((doc) => {
+      if (!doc.exists) {
+        console.log("❌ Group doesn't exist");
+        setIsMember(false);
+        return;
+      }
+      
+      const data = doc.data();
+      setGroupData(data);
 
-        const members = data?.members || [];
-        setIsMember(members.includes(currentUserId));
+      const members = data?.members || [];
+      const userIsMember = members.includes(currentUserId);
+      
+      console.log("✅ Simple membership result:", {
+        groupId: chatId,
+        currentUserId,
+        totalMembers: members.length,
+        userIsMember: userIsMember,
+        membersList: members
       });
+      
+      // SIMPLE FIX: Just use group membership, don't double-check community
+      setIsMember(userIsMember);
+      
+    }, (error) => {
+      console.error("❌ Error in group listener:", error);
+      // Default to true to avoid false negatives
+      setIsMember(true);
+    });
 
-    return () => unsubscribe();
-  }, [chatId, currentUserId, isGroup]);
+  return () => unsubscribe();
+}, [chatId, currentUserId, isGroup, isCommunity]);
 
 
 
@@ -373,7 +398,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
           }
         />
 
-        {/* Input Bar */}
+
         {/* Input Bar */}
 {isGroup ? (
   isMember ? (

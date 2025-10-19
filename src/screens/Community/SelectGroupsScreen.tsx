@@ -17,16 +17,16 @@ export default function SelectGroupsScreen({ route, navigation }) {
   const [groups, setGroups] = useState([]);
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   
   const currentUser = authService.currentUser;
 
-  // 🆕 FIXED: Single useEffect with admin check
+  // 🆕 FIXED: Separate useEffect hooks for better cleanup
   useEffect(() => {
     if (!currentUser?.uid) return;
 
-    const checkCommunityAdminAndLoadGroups = async () => {
+    const checkCommunityAdmin = async () => {
       try {
-        // 🆕 FIRST: Check if user is community admin
         const communityDoc = await firestore()
           .collection("communities")
           .doc(communityId)
@@ -36,44 +36,51 @@ export default function SelectGroupsScreen({ route, navigation }) {
         if (communityData && communityData.admin !== currentUser.uid) {
           Alert.alert("Access Denied", "Only community admin can add groups");
           navigation.goBack();
-          return;
+          return false;
         }
-
-        // 🆕 SECOND: Only load groups if user is admin
-        const unsubscribe = firestore()
-          .collection('groups')
-          .where('admin', '==', currentUser.uid)
-          .where('isCommunityGroup', '!=', true) // 🆕 EXCLUDE GROUPS ALREADY IN COMMUNITIES
-          .onSnapshot(
-            snapshot => {
-              const groupsData = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data(),
-              }));
-              setGroups(groupsData);
-              setLoading(false);
-            },
-            error => {
-              console.error("Error fetching admin groups:", error);
-              setLoading(false);
-            }
-          );
-
-        return unsubscribe;
-
+        setIsAdmin(true);
+        return true;
       } catch (error) {
         console.error("Error checking admin status:", error);
         Alert.alert("Error", "Failed to verify permissions");
         navigation.goBack();
-        setLoading(false);
+        return false;
       }
     };
 
-    const unsubscribe = checkCommunityAdminAndLoadGroups();
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
+    checkCommunityAdmin();
   }, [currentUser?.uid, communityId]);
+
+  // 🆕 FIXED: Separate useEffect for groups subscription
+  useEffect(() => {
+    if (!currentUser?.uid || !isAdmin) return;
+
+    const unsubscribe = firestore()
+      .collection('groups')
+      .where('admin', '==', currentUser.uid)
+      .where('isCommunityGroup', '!=', true)
+      .onSnapshot(
+        snapshot => {
+          const groupsData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          setGroups(groupsData);
+          setLoading(false);
+        },
+        error => {
+          console.error("Error fetching admin groups:", error);
+          setLoading(false);
+        }
+      );
+
+    // 🆕 FIXED: Proper cleanup function
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [currentUser?.uid, isAdmin]);
 
   const toggleGroupSelection = (groupId) => {
     setSelectedGroups(prev => 
@@ -126,8 +133,8 @@ export default function SelectGroupsScreen({ route, navigation }) {
               members: groupData.members || [],
               createdBy: groupData.createdBy || currentUser.uid,
               admin: groupData.admin || currentUser.uid,
-              isCommunityGroup: true, // 🆕 ADD THIS
-              communityId: communityId, // 🆕 ADD THIS
+              isCommunityGroup: true,
+              communityId: communityId,
             });
         }
       }
@@ -136,7 +143,7 @@ export default function SelectGroupsScreen({ route, navigation }) {
       Alert.alert("Success", `${selectedGroups.length} group(s) added to community`, [
         {
           text: "OK",
-          onPress: () => navigation.navigate('CommunityScreen') // 🆕 NAVIGATE TO COMMUNITY SCREEN
+          onPress: () => navigation.navigate('CommunityScreen')
         }
       ]);
       
@@ -160,9 +167,12 @@ export default function SelectGroupsScreen({ route, navigation }) {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={24} color="#000" />
-        </TouchableOpacity>
+      <TouchableOpacity 
+  onPress={() => navigation.goBack()} 
+  style={styles.backButton}
+>
+  <Icon name="arrow-back" size={24} color="#000" />
+</TouchableOpacity>
         <Text style={styles.headerTitle}>Add Existing Groups</Text>
         <View style={{ width: 24 }} />
       </View>
@@ -171,13 +181,13 @@ export default function SelectGroupsScreen({ route, navigation }) {
       <View style={styles.infoBox}>
         <Text style={styles.infoTitle}>Select Groups to Add</Text>
         <Text style={styles.infoText}>
-          Choose from groups where you are an admin and not already in a community.
+          Choose from groups where you are an admin.
         </Text>
         {/* 🆕 ADD ADMIN BADGE */}
-        <View style={styles.adminBadge}>
-          <Icon name="admin-panel-settings" size={16} color="#FFD700" />
-          <Text style={styles.adminBadgeText}>You are the community admin</Text>
-        </View>
+        {/* <View style={styles.adminBadge}> */}
+          {/* <Icon name="admin-panel-settings" size={16} color="#FFD700" /> */}
+          {/* <Text style={styles.adminBadgeText}>You are the community admin</Text> */}
+        {/* </View> */}
       </View>
 
       {/* Groups List */}
@@ -192,7 +202,7 @@ export default function SelectGroupsScreen({ route, navigation }) {
               selectedGroups.includes(item.id) && styles.groupItemSelected
             ]}
             onPress={() => toggleGroupSelection(item.id)}
-            disabled={item.communityId} // 🆕 DISABLE IF ALREADY IN COMMUNITY
+            disabled={item.communityId}
           >
             <View style={styles.groupInfo}>
               <View style={styles.groupAvatar}>
@@ -262,6 +272,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
+  backButton: {
+    marginTop: 20, // Add top margin here
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -273,13 +286,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingVertical: 20,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 20,
+    fontWeight: "400",
+    marginTop: 20,
+    marginLeft: 12, // Add some left margin to separate from back button
+    flex: 1, // This makes the title take available space and push to left
+
   },
   infoBox: {
     backgroundColor: "#f8f8f8",
@@ -298,7 +315,6 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: 10,
   },
-  // 🆕 ADD ADMIN BADGE STYLES
   adminBadge: {
     flexDirection: "row",
     alignItems: "center",
