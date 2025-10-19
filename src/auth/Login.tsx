@@ -15,35 +15,90 @@ type Props = {
   navigation: Navigation;
 };
 
+// Password strength checker function
+const checkPasswordStrength = (password: string) => {
+  if (!password) return { strength: 'none', score: 0, feedback: [] };
+
+  const feedback: string[] = [];
+  let score = 0;
+
+  // Length check
+  if (password.length >= 8) {
+    score += 1;
+  } else {
+    feedback.push('At least 8 characters');
+  }
+
+  // Lowercase check
+  if (/[a-z]/.test(password)) {
+    score += 1;
+  } else {
+    feedback.push('One lowercase letter');
+  }
+
+  // Uppercase check
+  if (/[A-Z]/.test(password)) {
+    score += 1;
+  } else {
+    feedback.push('One uppercase letter');
+  }
+
+  // Number check
+  if (/\d/.test(password)) {
+    score += 1;
+  } else {
+    feedback.push('One number');
+  }
+
+  // Special character check
+  if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+    score += 1;
+  } else {
+    feedback.push('One special character');
+  }
+
+  // Determine strength level
+  let strength: 'weak' | 'fair' | 'good' | 'strong' | 'none' = 'none';
+  if (score <= 2) strength = 'weak';
+  else if (score === 3) strength = 'fair';
+  else if (score === 4) strength = 'good';
+  else if (score === 5) strength = 'strong';
+
+  return { strength, score, feedback };
+};
+
 const LoginScreen = ({ navigation }: Props) => {
   const [email, setEmail] = useState({ value: '', error: '' });
   const [password, setPassword] = useState({ value: '', error: '' });
   const [loading, setLoading] = useState(false);
+  const [showPasswordStrength, setShowPasswordStrength] = useState(false);
+
+  const passwordStrength = checkPasswordStrength(password.value);
 
   const _onLoginPressed = async () => {
     const emailError = emailValidator(email.value);
     const passwordError = passwordValidator(password.value);
-  
+
     if (emailError || passwordError) {
       setEmail({ ...email, error: emailError });
       setPassword({ ...password, error: passwordError });
       return;
     }
-  
+
     setLoading(true);
-  
+
     try {
       console.log('Attempting Firebase login...');
-  
+
       // ✅ Sign in with Firebase Auth
       const userCredential = await authService.signInWithEmailAndPassword(
         email.value.trim(),
         password.value
       );
-  
+
       const user = userCredential.user;
       await user.reload(); // refresh user state
-  
+
       // ⚠️ Check if email is verified
       if (!user.emailVerified) {
         setLoading(false);
@@ -68,15 +123,15 @@ const LoginScreen = ({ navigation }: Props) => {
         );
         return;
       }
-  
+
       // ✅ Email verified, allow login
       setLoading(false);
       navigation.navigate('ChatScreen');
-  
+
     } catch (error: any) {
       setLoading(false);
       console.error('Login error:', error);
-  
+
       let errorMessage = 'Login failed. Please try again.';
       switch (error.code) {
         case 'auth/user-not-found':
@@ -95,11 +150,30 @@ const LoginScreen = ({ navigation }: Props) => {
           errorMessage = 'Too many login attempts. Please try again later.';
           break;
       }
-  
+
       Alert.alert('Error', errorMessage);
     }
   };
 
+  const getStrengthColor = () => {
+    switch (passwordStrength.strength) {
+      case 'weak': return '#ff4444';
+      case 'fair': return '#ffaa00';
+      case 'good': return '#00aa00';
+      case 'strong': return '#008800';
+      default: return theme.colors.secondary;
+    }
+  };
+
+  const getStrengthText = () => {
+    switch (passwordStrength.strength) {
+      case 'weak': return 'Weak';
+      case 'fair': return 'Fair';
+      case 'good': return 'Good';
+      case 'strong': return 'Strong';
+      default: return '';
+    }
+  };
 
   return (
     <Background>
@@ -118,11 +192,44 @@ const LoginScreen = ({ navigation }: Props) => {
       <TextInput
         label="Password"
         value={password.value}
-        onChangeText={(text) => setPassword({ value: text, error: '' })}
+        onChangeText={(text) => {
+          setPassword({ value: text, error: '' });
+          setShowPasswordStrength(text.length > 0);
+        }}
+        onBlur={() => setShowPasswordStrength(false)}
+        onFocus={() => setShowPasswordStrength(true)}
         error={!!password.error}
         errorText={password.error}
         secureTextEntry
       />
+
+      {/* Password Strength Indicator */}
+      {showPasswordStrength && password.value.length > 0 && (
+        <View style={styles.passwordStrengthContainer}>
+          <View style={styles.strengthBar}>
+            <View 
+              style={[
+                styles.strengthFill, 
+                { 
+                  width: `${(passwordStrength.score / 5) * 100}%`,
+                  backgroundColor: getStrengthColor()
+                }
+              ]} 
+            />
+          </View>
+          <Text style={[styles.strengthText, { color: getStrengthColor() }]}>
+            Password Strength: {getStrengthText()}
+          </Text>
+          {passwordStrength.feedback.length > 0 && (
+            <View style={styles.feedbackContainer}>
+              <Text style={styles.feedbackTitle}>Requirements:</Text>
+              {passwordStrength.feedback.map((item, index) => (
+                <Text key={index} style={styles.feedbackItem}>• {item}</Text>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
 
       <View style={styles.forgotPassword}>
         <TouchableOpacity
@@ -132,10 +239,14 @@ const LoginScreen = ({ navigation }: Props) => {
         </TouchableOpacity>
       </View>
 
-      <Button title={loading ? 'Logging in...' : 'Login'} onPress={_onLoginPressed} />
+      <Button 
+        title={loading ? 'Logging in...' : 'Login'} 
+        onPress={_onLoginPressed} 
+        disabled={loading}
+      />
 
       <View style={styles.row}>
-        <Text style={styles.label}>Don’t have an account? </Text>
+        <Text style={styles.label}>Don't have an account? </Text>
         <TouchableOpacity onPress={() => navigation.navigate('RegisterScreen')}>
           <Text style={styles.link}>Sign up</Text>
         </TouchableOpacity>
@@ -161,6 +272,45 @@ const styles = StyleSheet.create({
   link: {
     fontWeight: 'bold',
     color: theme.colors.primary,
+  },
+  passwordStrengthContainer: {
+    width: '100%',
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  strengthBar: {
+    height: 6,
+    backgroundColor: '#e0e0e0',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  strengthFill: {
+    height: '100%',
+    borderRadius: 3,
+    transition: 'width 0.3s ease',
+  },
+  strengthText: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  feedbackContainer: {
+    marginTop: 8,
+    padding: 8,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 4,
+  },
+  feedbackTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.secondary,
+    marginBottom: 4,
+  },
+  feedbackItem: {
+    fontSize: 11,
+    color: theme.colors.secondary,
+    marginLeft: 4,
   },
 });
 
