@@ -29,6 +29,7 @@ type ChatItemType = {
   isGroup?: boolean;
   isCommunity?: boolean;
   otherUserId?: string;
+  unreadCount?: number;
 };
 
 type UserItem = {
@@ -141,6 +142,8 @@ const Chat = ({ navigation }: { navigation: any }) => {
 
   // Chat row component - simplified without swipe
   const ChatListItem = ({ item }: { item: ChatItemType }) => {
+    
+    
     const displayTime = (() => {
       try {
         const d = new Date(item.updatedAt);
@@ -168,6 +171,12 @@ const Chat = ({ navigation }: { navigation: any }) => {
             {item.lastMessage || "No messages yet"}
           </Text>
         </View>
+        {/* Unread badge */}
+      {item.unreadCount > 0 && (
+        <View style={styles.unreadBadge}>
+          <Text style={styles.unreadText}>{item.unreadCount}</Text>
+        </View>
+      )}
         <Text style={styles.chatTime}>{displayTime}</Text>
       </TouchableOpacity>
     );
@@ -276,6 +285,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#555",
   },
+  unreadBadge: {
+    backgroundColor: '#25D366',
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    position: 'absolute',
+    right: 10,
+    top: 10,
+  },
+  unreadText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  
   loader: {
     flex: 1,
     justifyContent: "center",

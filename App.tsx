@@ -18,7 +18,7 @@ import CommunityOverviewScreen from "./src/screens/Community/CommunityOverviewSc
 import ManageGroupsScreen from "./src/screens/Community/ManageGroupScreen";
 import ChatScreen from "./src/screens/Chats/Chat";
 import ProductScreen from "./src/screens/Product";
-import SplashScreen from "./src/screens/Splash";
+import SplashScreen from "./src/screens/SplashScreen";
 import SubscriptionScreen from "./src/screens/Subscription";
 import ChatDetail from "./src/screens/Chats/ChatDetail";
 import ProfileScreen from "./src/screens/Settings/Profile";
@@ -41,6 +41,7 @@ const App = () => {
   useEffect(() => {
     // 👇 Listen to Firebase auth state (login/logout)
     const unsubscribe = auth().onAuthStateChanged((user) => {
+      console.log('🔐 Auth state:', user ? `User: ${user.email}` : 'No user');
       setUser(user);
       if (initializing) setInitializing(false);
     });
@@ -63,37 +64,40 @@ const App = () => {
         <NativeBaseProvider>
           <NavigationContainer>
             <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
-            <Stack.Navigator screenOptions={{ headerShown: false }}>
-              {user ? (
-                // ✅ Logged-in routes
-                <>
-                  <Stack.Screen name="ChatScreen" component={ChatScreen} />
-                  <Stack.Screen name="ChatDetailScreen" component={ChatDetail} />
-                  <Stack.Screen name="SettingsScreen" component={SettingsScreen} />
-                  <Stack.Screen name="CommunityScreen" component={CommunityScreen} />
-                  <Stack.Screen name="ProductScreen" component={ProductScreen} />
-                  <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
-                  <Stack.Screen name="SelectMembersScreen" component={SelectMembersScreen} />
-                  <Stack.Screen name="GroupCreationScreen" component={GroupCreationScreen} />
-                  <Stack.Screen name="GroupInfoScreen" component={GroupInfoScreen} />
-                  <Stack.Screen name="ContactProfileScreen" component={ContactProfileScreen} />
-                  <Stack.Screen name="CreateCommunityScreen" component={CreateCommunityScreen} />
-                  <Stack.Screen name="CommunityOverviewScreen" component={CommunityOverviewScreen} />
-                  <Stack.Screen name="ManageGroupsScreen" component={ManageGroupsScreen} />
-                  <Stack.Screen name="SelectGroupsScreen" component={SelectGroupsScreen} />
-                  <Stack.Screen name="ListUsers" component={ListUsers} />
-                  <Stack.Screen name="SubscriptionScreen" component={SubscriptionScreen} />
-                </>
-              ) : (
-                // ✅ Logged-out routes
-                <>
-                  <Stack.Screen name="SplashScreen" component={SplashScreen} />
-                  <Stack.Screen name="LoginScreen" component={LoginScreen} />
-                  <Stack.Screen name="RegisterScreen" component={RegisterScreen} />
-                  <Stack.Screen name="ForgotPasswordScreen" component={ForgotPasswordScreen} />
-                </>
-              )}
-            </Stack.Navigator>
+            <Stack.Navigator 
+  screenOptions={{ headerShown: false }}
+  initialRouteName="ChatScreen" // Add this line
+>
+  {user ? (
+    // ✅ Logged-in routes
+    <>
+      <Stack.Screen name="ChatScreen" component={ChatScreen} />
+      <Stack.Screen name="ChatDetailScreen" component={ChatDetail} />
+      <Stack.Screen name="SettingsScreen" component={SettingsScreen} />
+      <Stack.Screen name="CommunityScreen" component={CommunityScreen} />
+      <Stack.Screen name="ProductScreen" component={ProductScreen} />
+      <Stack.Screen name="ProfileScreen" component={ProfileScreen} />
+      <Stack.Screen name="SelectMembersScreen" component={SelectMembersScreen} />
+      <Stack.Screen name="GroupCreationScreen" component={GroupCreationScreen} />
+      <Stack.Screen name="GroupInfoScreen" component={GroupInfoScreen} />
+      <Stack.Screen name="ContactProfileScreen" component={ContactProfileScreen} />
+      <Stack.Screen name="CreateCommunityScreen" component={CreateCommunityScreen} />
+      <Stack.Screen name="CommunityOverviewScreen" component={CommunityOverviewScreen} />
+      <Stack.Screen name="ManageGroupsScreen" component={ManageGroupsScreen} />
+      <Stack.Screen name="SelectGroupsScreen" component={SelectGroupsScreen} />
+      <Stack.Screen name="ListUsers" component={ListUsers} />
+      <Stack.Screen name="SubscriptionScreen" component={SubscriptionScreen} />
+    </>
+  ) : (
+    // ✅ Logged-out routes
+    <>
+      <Stack.Screen name="SplashScreen" component={SplashScreen} />
+      <Stack.Screen name="LoginScreen" component={LoginScreen} />
+      <Stack.Screen name="RegisterScreen" component={RegisterScreen} />
+      <Stack.Screen name="ForgotPasswordScreen" component={ForgotPasswordScreen} />
+    </>
+  )}
+</Stack.Navigator>
           </NavigationContainer>
         </NativeBaseProvider>
       </SafeAreaProvider>

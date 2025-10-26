@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { View, StyleSheet } from "react-native";
 import Logo from "../components/Logo";
 
-const Splash = ({ navigation }: { navigation: any }) => {
+const SplashScreen = ({ navigation }: { navigation: any }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       navigation.replace("RegisterScreen"); // replace so user can't go back to splash
@@ -27,4 +27,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Splash;
+export default SplashScreen;

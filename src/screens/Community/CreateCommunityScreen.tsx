@@ -34,94 +34,113 @@ export default function CreateCommunityScreen({ navigation }) {
   };
 
   // Create community with your existing structure
-  const createCommunity = async () => {
-    if (!communityName.trim()) {
-      return Alert.alert("Error", "Please enter a community name");
+// Create community with your existing structure
+const createCommunity = async () => {
+  if (!communityName.trim()) {
+    return Alert.alert("Error", "Please enter a community name");
+  }
+
+  if (!currentUser) {
+    return Alert.alert("Error", "You must be logged in to create a community");
+  }
+
+  setLoading(true);
+
+  try {
+    let photoURL = "";
+
+    // Upload image if selected
+    if (photo) {
+      const imageRef = storageService.ref(`communities/${Date.now()}_${photo.fileName}`);
+      const img = await fetch(photo.uri);
+      const bytes = await img.blob();
+      await imageRef.put(bytes);
+      photoURL = await imageRef.getDownloadURL();
     }
 
-    if (!currentUser) {
-      return Alert.alert("Error", "You must be logged in to create a community");
-    }
+    const communityMembers = [currentUser.uid];
 
-    setLoading(true);
+    // Create community document
+    const communityRef = await db.collection("communities").add({
+      name: communityName,
+      description,
+      photoURL,
+      createdBy: currentUser.uid,
+      admin: currentUser.uid,
+      members: communityMembers, 
+      createdAt: firestore.FieldValue.serverTimestamp(),
+      updatedAt: firestore.FieldValue.serverTimestamp(),
+      lastAnnouncement: "Community created - welcome everyone!",
+      lastGeneralMessage: "Let's start the conversation!",
+    });
 
-    try {
-      let photoURL = "";
+    const communityId = communityRef.id;
 
-      // Upload image if selected
-      if (photo) {
-        const imageRef = storageService.ref(`communities/${Date.now()}_${photo.fileName}`);
-        const img = await fetch(photo.uri);
-        const bytes = await img.blob();
-        await imageRef.put(bytes);
-        photoURL = await imageRef.getDownloadURL();
-      }
-
-      // Create community document (your existing structure)
-      const communityRef = await db.collection("communities").add({
-        name: communityName,
-        description,
-        photoURL,
-        createdBy: currentUser.uid,
-        admin: currentUser.uid,
-        members: [currentUser.uid],
+    // Create default groups using your subcollection structure
+    const defaultGroups = [
+      {
+        name: "Announcements",
+        description: "Official announcements from community admins",
+        isAnnouncement: true,
+        lastMessage: "Community announcements will appear here",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         createdAt: firestore.FieldValue.serverTimestamp(),
-        updatedAt: firestore.FieldValue.serverTimestamp(),
-        lastAnnouncement: "Community created - welcome everyone!",
-        lastGeneralMessage: "Let's start the conversation!",
+        members: communityMembers, // ✅ includes current user
+        admin: currentUser.uid, // ✅ used in some screens
+        adminId: currentUser.uid, // ✅ used in other screens
+        createdBy: currentUser.uid, // ✅ consistent with rest of app
+        isCommunityGroup: true, // ✅ for clarity
+        communityId: communityId,
+      },
+      {
+        name: "General",
+        description: "General discussions for all community members",
+        isAnnouncement: false,
+        lastMessage: "Welcome to the general chat!",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        createdAt: firestore.FieldValue.serverTimestamp(),
+        members: communityMembers, // ✅ includes current user
+        admin: currentUser.uid, // ✅ correct field name
+        createdBy: currentUser.uid,
+        isCommunityGroup: true,
+        communityId: communityId,
+      }
+    ];
+    
+
+    // Add groups to the community's groups subcollection
+    for (const group of defaultGroups) {
+      const groupRef = await db
+        .collection("communities")
+        .doc(communityId)
+        .collection("groups")
+        .add(group); // ✅ Just pass the group object as-is
+
+      // Add groupId for easier lookups later
+      await groupRef.update({
+        groupId: groupRef.id,
       });
 
-      const communityId = communityRef.id;
-
-      // Create default groups using your subcollection structure
-      const defaultGroups = [
-        {
-          name: "Announcements",
-          description: "Official announcements from community admins",
-          isAnnouncement: true,
-          lastMessage: "Community announcements will appear here",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          createdAt: firestore.FieldValue.serverTimestamp(),
-        },
-        {
-          name: "General",
-          description: "General discussions for all community members",
-          isAnnouncement: false,
-          lastMessage: "Welcome to the general chat!",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          createdAt: firestore.FieldValue.serverTimestamp(),
-        }
-      ];
-
-      // Add groups to the community's groups subcollection
-      for (const group of defaultGroups) {
-        const groupRef = await db
-          .collection("communities")
-          .doc(communityId)
-          .collection("groups")
-          .add({
-            ...group,
-            members: [currentUser.uid], // 👈 ensure admin is a member
-            adminId: currentUser.uid,   // 👈 track group admin
-          });
-      
-        // add groupId for easier lookups later
-        await groupRef.update({
-          groupId: groupRef.id,
-        });
-      }
-      
-
-      setLoading(false);
-      Alert.alert("Success", "Community created successfully!");
-      navigation.navigate("CommunityOverviewScreen", { id: communityId });
-      
-    } catch (error) {
-      console.error("Error creating community:", error);
-      Alert.alert("Error", "Failed to create community");
-      setLoading(false);
+      // 🔥 CRITICAL: Also create in main groups collection for ChatDetailScreen
+      await db.collection("groups").doc(groupRef.id).set({
+        ...group,
+        groupId: groupRef.id,
+        communityId: communityId,
+        communityName: communityName,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+      });
     }
-  };
+
+    setLoading(false);
+    Alert.alert("Success", "Community created successfully!");
+    navigation.navigate("CommunityOverviewScreen", { id: communityId });
+    
+  } catch (error) {
+    console.error("Error creating community:", error);
+    Alert.alert("Error", "Failed to create community");
+    setLoading(false);
+  }
+};
 
   return (
     <View style={styles.container}>

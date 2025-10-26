@@ -295,12 +295,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 4,
   },
-  feedbackContainer: {
-    marginTop: 8,
-    padding: 8,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 4,
-  },
+  
   feedbackTitle: {
     fontSize: 12,
     fontWeight: '600',
