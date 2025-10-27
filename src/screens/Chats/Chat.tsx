@@ -172,11 +172,11 @@ const Chat = ({ navigation }: { navigation: any }) => {
           </Text>
         </View>
         {/* Unread badge */}
-      {item.unreadCount > 0 && (
+      {/* {item.unreadCount > 0 && (
         <View style={styles.unreadBadge}>
           <Text style={styles.unreadText}>{item.unreadCount}</Text>
         </View>
-      )}
+      )} */}
         <Text style={styles.chatTime}>{displayTime}</Text>
       </TouchableOpacity>
     );

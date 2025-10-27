@@ -16,64 +16,64 @@ type Props = {
 };
 
 // Password strength checker function
-const checkPasswordStrength = (password: string) => {
-  if (!password) return { strength: 'none', score: 0, feedback: [] };
+// const checkPasswordStrength = (password: string) => {
+//   if (!password) return { strength: 'none', score: 0, feedback: [] };
 
-  const feedback: string[] = [];
-  let score = 0;
+//   const feedback: string[] = [];
+//   let score = 0;
 
-  // Length check
-  if (password.length >= 8) {
-    score += 1;
-  } else {
-    feedback.push('At least 8 characters');
-  }
+//   // Length check
+//   if (password.length >= 8) {
+//     score += 1;
+//   } else {
+//     feedback.push('At least 8 characters');
+//   }
 
-  // Lowercase check
-  if (/[a-z]/.test(password)) {
-    score += 1;
-  } else {
-    feedback.push('One lowercase letter');
-  }
+//   // Lowercase check
+//   if (/[a-z]/.test(password)) {
+//     score += 1;
+//   } else {
+//     feedback.push('One lowercase letter');
+//   }
 
-  // Uppercase check
-  if (/[A-Z]/.test(password)) {
-    score += 1;
-  } else {
-    feedback.push('One uppercase letter');
-  }
+//   // Uppercase check
+//   if (/[A-Z]/.test(password)) {
+//     score += 1;
+//   } else {
+//     feedback.push('One uppercase letter');
+//   }
 
-  // Number check
-  if (/\d/.test(password)) {
-    score += 1;
-  } else {
-    feedback.push('One number');
-  }
+//   // Number check
+//   if (/\d/.test(password)) {
+//     score += 1;
+//   } else {
+//     feedback.push('One number');
+//   }
 
-  // Special character check
-  if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
-    score += 1;
-  } else {
-    feedback.push('One special character');
-  }
+//   // Special character check
+//   if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+//     score += 1;
+//   } else {
+//     feedback.push('One special character');
+//   }
 
-  // Determine strength level
-  let strength: 'weak' | 'fair' | 'good' | 'strong' | 'none' = 'none';
-  if (score <= 2) strength = 'weak';
-  else if (score === 3) strength = 'fair';
-  else if (score === 4) strength = 'good';
-  else if (score === 5) strength = 'strong';
+//   // Determine strength level
+//   let strength: 'weak' | 'fair' | 'good' | 'strong' | 'none' = 'none';
+//   if (score <= 2) strength = 'weak';
+//   else if (score === 3) strength = 'fair';
+//   else if (score === 4) strength = 'good';
+//   else if (score === 5) strength = 'strong';
 
-  return { strength, score, feedback };
-};
+//   return { strength, score, feedback };
+// };
 
 const LoginScreen = ({ navigation }: Props) => {
   const [email, setEmail] = useState({ value: '', error: '' });
   const [password, setPassword] = useState({ value: '', error: '' });
   const [loading, setLoading] = useState(false);
-  const [showPasswordStrength, setShowPasswordStrength] = useState(false);
+  //const [showPasswordStrength, setShowPasswordStrength] = useState(false);
 
-  const passwordStrength = checkPasswordStrength(password.value);
+  //const passwordStrength = checkPasswordStrength(password.value);
 
   const _onLoginPressed = async () => {
     const emailError = emailValidator(email.value);
@@ -155,25 +155,25 @@ const LoginScreen = ({ navigation }: Props) => {
     }
   };
 
-  const getStrengthColor = () => {
-    switch (passwordStrength.strength) {
-      case 'weak': return '#ff4444';
-      case 'fair': return '#ffaa00';
-      case 'good': return '#00aa00';
-      case 'strong': return '#008800';
-      default: return theme.colors.secondary;
-    }
-  };
+  // const getStrengthColor = () => {
+  //   switch (passwordStrength.strength) {
+  //     case 'weak': return '#ff4444';
+  //     case 'fair': return '#ffaa00';
+  //     case 'good': return '#00aa00';
+  //     case 'strong': return '#008800';
+  //     default: return theme.colors.secondary;
+  //   }
+  // };
 
-  const getStrengthText = () => {
-    switch (passwordStrength.strength) {
-      case 'weak': return 'Weak';
-      case 'fair': return 'Fair';
-      case 'good': return 'Good';
-      case 'strong': return 'Strong';
-      default: return '';
-    }
-  };
+  // const getStrengthText = () => {
+  //   switch (passwordStrength.strength) {
+  //     case 'weak': return 'Weak';
+  //     case 'fair': return 'Fair';
+  //     case 'good': return 'Good';
+  //     case 'strong': return 'Strong';
+  //     default: return '';
+  //   }
+  // };
 
   return (
     <Background>
@@ -194,16 +194,16 @@ const LoginScreen = ({ navigation }: Props) => {
         value={password.value}
         onChangeText={(text) => {
           setPassword({ value: text, error: '' });
-          setShowPasswordStrength(text.length > 0);
+          // setShowPasswordStrength(text.length > 0);
         }}
-        onBlur={() => setShowPasswordStrength(false)}
-        onFocus={() => setShowPasswordStrength(true)}
+        // onBlur={() => setShowPasswordStrength(false)}
+        // onFocus={() => setShowPasswordStrength(true)}
         error={!!password.error}
         errorText={password.error}
         secureTextEntry
       />
 
-      {/* Password Strength Indicator */}
+      {/* Password Strength Indicator
       {showPasswordStrength && password.value.length > 0 && (
         <View style={styles.passwordStrengthContainer}>
           <View style={styles.strengthBar}>
@@ -229,7 +229,7 @@ const LoginScreen = ({ navigation }: Props) => {
             </View>
           )}
         </View>
-      )}
+      )} */}
 
       <View style={styles.forgotPassword}>
         <TouchableOpacity

@@ -20,6 +20,7 @@ import {
   deleteMessage,
   deleteAllMessages,
   generateChatId,
+  markMessagesAsRead,
 } from "../../utils/firebase/Chat";
 import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
@@ -72,34 +73,28 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
 
   // Listen for messages - SIMPLIFIED VERSION
   useEffect(() => {
-    if (!chatId) return;
-
-    console.log("🔍 Setting up message listener for:", chatId);
-    
-    // Use a simple message listener without pagination
+    if (!chatId || !currentUserId) return;
+  
     const unsubscribe = firestore()
-      .collection('chats')
+      .collection("chats")
       .doc(chatId)
-      .collection('messages')
-      .orderBy('createdAt', 'asc')
-      .onSnapshot(
-        (snapshot) => {
-          const newMessages = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-          console.log("📨 Messages received:", newMessages.length);
-          setMessages(newMessages);
-          setLoading(false);
-        },
-        (error) => {
-          console.error("❌ Error listening to messages:", error);
-          setLoading(false);
-        }
-      );
-
+      .collection("messages")
+      .orderBy("createdAt", "asc")
+      .onSnapshot((snapshot) => {
+        const newMessages = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setMessages(newMessages);
+        setLoading(false);
+  
+        // ✅ Safe to call here
+        markMessagesAsRead(chatId, currentUserId);
+      });
+  
     return () => unsubscribe();
-  }, [chatId]);
+  }, [chatId, currentUserId]);
+  
 
   // Check group membership and data
   useEffect(() => {
@@ -115,7 +110,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
         // Try main groups collection first
         const mainGroupDoc = await firestore().collection("groups").doc(chatId).get();
         
-        if (mainGroupDoc.exists) {
+        if (mainGroupDoc.exists()) {
           const data = mainGroupDoc.data();
           console.log("✅ Found in main groups:", data?.name);
           setGroupData(data);

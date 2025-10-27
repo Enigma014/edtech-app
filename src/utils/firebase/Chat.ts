@@ -490,43 +490,49 @@ export async function loadMoreMessages(
 /**
  * Mark unread messages as read
  */
-export async function markMessagesAsRead(
-  chatId: string,
-  currentUserId: string,
-) {
+
+
+export async function markMessagesAsRead(chatId: string, currentUserId: string) {
   if (!chatId || !currentUserId) return;
 
-  const q = firestore()
-    .collection('chats')
-    .doc(chatId)
-    .collection('messages')
-    .where('receiverId', '==', currentUserId)
-    .where('isRead', '==', false);
+  const summaryRef = firestore().collection("chatSummaries").doc(chatId);
 
-  const snapshot = await q.get();
-  if (snapshot.empty) return;
+  try {
+    // Reset unread count and mark last seen time
+    await summaryRef.set(
+      {
+        [`unread_${currentUserId}`]: 0,
+        [`seenAt_${currentUserId}`]: firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
 
-  const batch = firestore().batch();
+    // Optionally mark unread messages as read (not required for the badge)
+    const messagesRef = firestore()
+      .collection("chats")
+      .doc(chatId)
+      .collection("messages");
 
-  snapshot.docs.forEach(docSnap => {
-    batch.update(docSnap.ref, {
-      isRead: true,
-      readAt: firestore.FieldValue.serverTimestamp(),
+    const unreadSnapshot = await messagesRef
+      .where("receiverId", "==", currentUserId)
+      .where("isRead", "==", false)
+      .get();
+
+    const batch = firestore().batch();
+
+    unreadSnapshot.forEach((docSnap) => {
+      batch.update(docSnap.ref, {
+        isRead: true,
+        readAt: firestore.FieldValue.serverTimestamp(),
+      });
     });
-  });
 
-  const summaryRef = firestore().collection('chatSummaries').doc(chatId);
-  batch.set(
-    summaryRef,
-    {
-      [`unread_${currentUserId}`]: 0,
-      [`seenAt_${currentUserId}`]: firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true },
-  );
-
-  await batch.commit();
+    await batch.commit();
+  } catch (error) {
+    console.error("Error marking messages as read:", error);
+  }
 }
+
 
 /**
  * Delete file safely (RN compatible)

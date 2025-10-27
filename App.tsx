@@ -1,6 +1,6 @@
 // App.tsx
 import React, { useEffect, useState } from "react";
-import { StatusBar, useColorScheme, ActivityIndicator, View } from "react-native";
+import { StatusBar, useColorScheme, ActivityIndicator, View, Alert } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { NativeBaseProvider } from "native-base";
 import { NavigationContainer } from "@react-navigation/native";
@@ -28,6 +28,7 @@ import GroupInfoScreen from "./src/screens/Groups/GroupInfoScreen";
 import ContactProfileScreen from "./src/screens/Chats/ContactProfileScreen";
 import SelectGroupsScreen from "./src/screens/Community/SelectGroupsScreen";
 import ListUsers from "./src/screens/Chats/ListUsers";
+import firestore from "@react-native-firebase/firestore";
 
 import "@utils/firebaseConfig";
 
@@ -39,24 +40,46 @@ const App = () => {
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    // 👇 Listen to Firebase auth state (login/logout)
-    const unsubscribe = auth().onAuthStateChanged((user) => {
-      console.log('🔐 Auth state:', user ? `User: ${user.email}` : 'No user');
-      setUser(user);
+    const unsubscribe = auth().onAuthStateChanged(async (user) => {
+      if (!user) {
+        console.log("🚪 No user — logged out");
+        setUser(null);
+        if (initializing) setInitializing(false);
+        return;
+      }
+  
+      console.log("🔐 Auth state: Logged in as", user.email);
+  
+      // Wait 1 second to let Firestore registration complete (important!)
+      await new Promise<void>((resolve) => setTimeout(() => resolve(), 1000));
+  
+      try {
+        const userDoc = await firestore().collection("users").doc(user.uid).get();
+  
+        if (userDoc.exists) {
+          console.log("✅ Firestore user found, fully registered");
+          setUser(user);
+        } else {
+          console.log("⚠️ Auth user exists but not registered — logging out");
+          await auth().signOut();
+          Alert.alert(
+            "Account not registered",
+            "Please register your account before logging in."
+          );
+          setUser(null);
+        }
+      } catch (err) {
+        console.error("Firestore check failed:", err);
+        Alert.alert("Error", "Could not verify user data.");
+        setUser(null);
+      }
+  
       if (initializing) setInitializing(false);
     });
-
+  
     return unsubscribe;
   }, [initializing]);
-
-  // While checking login state, show a small loader
-  if (initializing) {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color="#25D366" />
-      </View>
-    );
-  }
+  
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -66,7 +89,7 @@ const App = () => {
             <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
             <Stack.Navigator 
   screenOptions={{ headerShown: false }}
-  initialRouteName="ChatScreen" // Add this line
+  initialRouteName= {user? "ChatScreen" : "SplashScreen"} // Add this line
 >
   {user ? (
     // ✅ Logged-in routes
@@ -106,3 +129,4 @@ const App = () => {
 };
 
 export default App;
+

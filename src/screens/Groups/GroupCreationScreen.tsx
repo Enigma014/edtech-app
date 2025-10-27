@@ -34,6 +34,31 @@ export default function GroupCreationScreen() {
     setLoading(false);
     setSuccess(false);
   };
+  // 🧩 Create a chat summary doc for unread counts and notifications
+const createChatSummary = async (chatId: string, members: string[], chatType: string) => {
+  try {
+    const summaryRef = firestore().collection("chatSummaries").doc(chatId);
+    const summaryData: any = {
+      chatType,
+      users: members,
+      lastMessage: "Group created",
+      lastSender: null,
+      lastReceiver: null,
+      lastTimestamp: firestore.FieldValue.serverTimestamp(),
+    };
+
+    // Initialize unread counts for each member
+    members.forEach((uid) => {
+      summaryData[`unread_${uid}`] = 0;
+      summaryData[`seenAt_${uid}`] = firestore.FieldValue.serverTimestamp();
+    });
+
+    await summaryRef.set(summaryData);
+    console.log("✅ chatSummaries initialized for", chatId);
+  } catch (error) {
+    console.error("❌ Failed to create chat summary:", error);
+  }
+};
 
   const addGroupToCommunity = async () => {
     if (loading || success) return; // 🆕 Prevent if success
@@ -87,7 +112,8 @@ export default function GroupCreationScreen() {
       };
   
       await mainGroupRef.set(mainGroupData);
-  
+      await createChatSummary(mainGroupRef.id, members, "community");
+
       await firestore()
         .collection("communities")
         .doc(communityId)
@@ -168,6 +194,7 @@ export default function GroupCreationScreen() {
       };
 
       await groupRef.set(groupData);
+      await createChatSummary(groupRef.id, members, "group");
 
       console.log("✅ [DEBUG] Regular group created successfully!");
 
