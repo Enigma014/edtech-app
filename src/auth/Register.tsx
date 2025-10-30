@@ -10,6 +10,7 @@ import { theme } from '../core/theme';
 import { emailValidator, passwordValidator, nameValidator } from '../core/utils';
 import { Navigation } from '../types';
 import useRegisterStore from '@store/RegisterStore/RegisterStore';
+import { setAuthOperationInProgress } from '@utils/authGate';
 
 type Props = {
   navigation: Navigation;
@@ -40,8 +41,10 @@ const RegisterScreen = ({ navigation }: Props) => {
     }
 
     setLoading(true);
+    setAuthOperationInProgress(true);
     try {
       await register(name.value, email.value, password.value);
+      console.log('✅ Registration successful, verification email sent');
 
       Alert.alert(
         'Verify Your Email',
@@ -53,6 +56,7 @@ const RegisterScreen = ({ navigation }: Props) => {
       Alert.alert('Registration Error', err.message || 'Something went wrong.');
     } finally {
       setLoading(false);
+      setAuthOperationInProgress(false);
     }
   };
 

@@ -19,11 +19,14 @@ const useRegisterStore = create<RegisterState>((set, get) => ({
 
       // Create Firestore user document
       await createUserInFirestore(user.uid, name, email, false);
-
+      console.log('✅ User document created in Firestore');
       // Send verification email
-      await user.sendEmailVerification();
+      user.sendEmailVerification();
+      console.log('✅ Verification email sent to', email);
 
-      set({ user });
+      await auth().signOut();
+
+      set({ user: null });
     } catch (error: any) {
       console.error('Register error:', error);
       throw error;

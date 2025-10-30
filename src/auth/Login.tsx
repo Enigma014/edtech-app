@@ -10,6 +10,7 @@ import { theme } from '../core/theme';
 import { emailValidator, passwordValidator } from '../core/utils';
 import { Navigation } from '../types';
 import { authService, db } from '@utils/firebaseConfig';
+import { setAuthOperationInProgress } from '@utils/authGate';
 
 type Props = {
   navigation: Navigation;
@@ -86,6 +87,7 @@ const LoginScreen = ({ navigation }: Props) => {
     }
 
     setLoading(true);
+    setAuthOperationInProgress(true);
 
     try {
       console.log('Attempting Firebase login...');
@@ -106,27 +108,20 @@ const LoginScreen = ({ navigation }: Props) => {
           'Email Not Verified',
           'Your email is not verified yet. Please check your inbox.',
           [
-            {
-              text: 'Resend Email',
-              onPress: async () => {
-                try {
-                  await user.sendEmailVerification();
-                  Alert.alert('Sent', 'Verification email has been resent.');
-                } catch (err: any) {
-                  console.error(err);
-                  Alert.alert('Error', err.message || 'Failed to resend email.');
-                }
-              },
-            },
             { text: 'OK', style: 'cancel' },
           ]
         );
+        try {
+            await authService.signOut();
+            console.log('User signed out after unverified login');
+          } catch (e) {
+            console.warn('Sign out failed', e);
+          }
         return;
       }
 
       // ✅ Email verified, allow login
       setLoading(false);
-      navigation.navigate('ChatScreen');
 
     } catch (error: any) {
       setLoading(false);
@@ -134,7 +129,7 @@ const LoginScreen = ({ navigation }: Props) => {
 
       let errorMessage = 'Login failed. Please try again.';
       switch (error.code) {
-        case 'auth/user-not-found':
+        case 'auth/invalid-credential':
           errorMessage = 'No account found with this email.';
           break;
         case 'auth/wrong-password':
@@ -152,6 +147,8 @@ const LoginScreen = ({ navigation }: Props) => {
       }
 
       Alert.alert('Error', errorMessage);
+    }finally{
+      setAuthOperationInProgress(false);
     }
   };
 
@@ -288,7 +285,6 @@ const styles = StyleSheet.create({
   strengthFill: {
     height: '100%',
     borderRadius: 3,
-    transition: 'width 0.3s ease',
   },
   strengthText: {
     fontSize: 12,

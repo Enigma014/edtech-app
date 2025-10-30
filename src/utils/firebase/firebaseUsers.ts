@@ -12,10 +12,11 @@ export const createUserInFirestore = async (
       id: uid,
       name,
       email,
-      isAdmin,         // 👈 Added field
+      isAdmin,
       
       createdAt: firestore.FieldValue.serverTimestamp(),
     });
+    console.log('✅ Firestore user created with ID:', uid);
   } catch (error) {
     console.error('Error creating user in Firestore:', error);
     throw error;
