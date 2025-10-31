@@ -26,15 +26,15 @@ import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
 
 const ChatDetailScreen = ({ route, navigation }: any) => {
-  const { 
-    chatId: initialChatId, 
-    name, 
-    receiverId, 
-    isGroup, 
-    contactId, 
-    isCommunity, 
-    communityId, 
-    otherUserId 
+  const {
+    chatId: initialChatId,
+    name,
+    receiverId,
+    isGroup,
+    contactId,
+    isCommunity,
+    communityId,
+    otherUserId,
   } = route.params;
 
   const [message, setMessage] = useState("");
@@ -44,6 +44,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
   const [groupData, setGroupData] = useState<any>(null);
   const [isMember, setIsMember] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [groupChecked, setGroupChecked] = useState(!isGroup); // if not a group, consider checked
   const flatListRef = useRef<FlatList>(null);
 
   const currentUserId = auth().currentUser?.uid;
@@ -58,7 +59,9 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     );
   }
 
-  const chatId = isGroup ? initialChatId : generateChatId(currentUserId, otherUserId || receiverId || contactId);
+  const chatId = isGroup
+    ? initialChatId
+    : generateChatId(currentUserId, otherUserId || receiverId || contactId);
 
   if (!chatId) {
     return (
@@ -71,10 +74,10 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
     );
   }
 
-  // Listen for messages - SIMPLIFIED VERSION
+  // Listen for messages
   useEffect(() => {
     if (!chatId || !currentUserId) return;
-  
+
     const unsubscribe = firestore()
       .collection("chats")
       .doc(chatId)
@@ -87,29 +90,31 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
         }));
         setMessages(newMessages);
         setLoading(false);
-  
-        // ✅ Safe to call here
+
+        // mark as read
         markMessagesAsRead(chatId, currentUserId);
       });
-  
+
     return () => unsubscribe();
   }, [chatId, currentUserId]);
-  
 
   // Check group membership and data
   useEffect(() => {
     if (!isGroup || !chatId) {
       setLoading(false);
+      setGroupChecked(true);
       return;
     }
 
     console.log("🔍 Checking group membership for:", chatId);
-    
+
     const checkGroupMembership = async () => {
       try {
+        setGroupChecked(false);
+
         // Try main groups collection first
         const mainGroupDoc = await firestore().collection("groups").doc(chatId).get();
-        
+
         if (mainGroupDoc.exists()) {
           const data = mainGroupDoc.data();
           console.log("✅ Found in main groups:", data?.name);
@@ -138,28 +143,48 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
 
         console.log("❌ Group not found anywhere");
         setIsMember(false);
-        
       } catch (error) {
         console.error("❌ Error checking group membership:", error);
         setIsMember(false);
       } finally {
         setLoading(false);
+        setGroupChecked(true);
       }
     };
 
     const validateMembership = async (data: any) => {
       const members = data?.members || [];
-      const isAdmin = data?.adminId === currentUserId || data?.admin === currentUserId;
-      const userIsMember = members.includes(currentUserId) || isAdmin;
-      
+      const isAdminLocal =
+        data?.adminId === currentUserId || data?.admin === currentUserId;
+
+      // robust membership check: members can be strings or objects
+      const userIsMember =
+        Array.isArray(members) &&
+        members.some((m: any) => {
+          if (!m) return false;
+          if (typeof m === "string") return m === currentUserId;
+          if (typeof m === "object") {
+            return (
+              m.id === currentUserId ||
+              m.userId === currentUserId ||
+              m.uid === currentUserId ||
+              m._id === currentUserId
+            );
+          }
+          return false;
+        });
+
+      const finalIsMember = userIsMember || !!isAdminLocal;
+
       console.log("👤 Membership check:", {
         members,
-        isAdmin,
+        isAdminLocal,
         userIsMember,
-        currentUserId
+        finalIsMember,
+        currentUserId,
       });
-      
-      setIsMember(userIsMember);
+
+      setIsMember(finalIsMember);
     };
 
     checkGroupMembership();
@@ -169,9 +194,16 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
   const handleSend = async () => {
     if (!message.trim() || !currentUserId) return;
 
+    // If group permissions are not validated yet, block sending to be safe
+    if (isGroup && !groupChecked) {
+      Alert.alert("Please wait", "Checking group permissions...");
+      return;
+    }
+
     // Check announcements restriction
     if (groupData?.isAnnouncement) {
-      const isAdmin = groupData?.adminId === currentUserId || groupData?.admin === currentUserId;
+      const isAdmin =
+        groupData?.adminId === currentUserId || groupData?.admin === currentUserId;
       if (!isAdmin) {
         Alert.alert("Restricted", "Only admins can post in Announcements");
         return;
@@ -184,13 +216,13 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
       id: `temp-${Date.now()}`,
       text: message.trim(),
       senderId: currentUserId,
-      receiverId: isGroup ? chatId : (otherUserId || receiverId || contactId),
+      receiverId: isGroup ? chatId : otherUserId || receiverId || contactId,
       createdAt: new Date(),
       isOptimistic: true,
       chatType: isGroup ? "group" : "chat",
     };
 
-    setMessages(prev => [...prev, optimisticMsg]);
+    setMessages((prev) => [...prev, optimisticMsg]);
     const messageToSend = message;
     setMessage("");
 
@@ -198,7 +230,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
       await sendMessage(
         chatId,
         currentUserId,
-        isGroup ? chatId : (otherUserId || receiverId || contactId),
+        isGroup ? chatId : otherUserId || receiverId || contactId,
         messageToSend,
         undefined,
         null,
@@ -207,8 +239,8 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
       console.log("✅ Message sent successfully");
     } catch (error: any) {
       console.error("❌ Error sending message:", error);
-      setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
-      Alert.alert("Error", "Failed to send message: " + error.message);
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticMsg.id));
+      Alert.alert("Error", "Failed to send message: " + (error?.message || error));
     }
   };
 
@@ -227,7 +259,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
         onPress: async () => {
           try {
             await deleteMessage(chatId, messageObj.id);
-            setMessages(prev => prev.filter(m => m.id !== messageObj.id));
+            setMessages((prev) => prev.filter((m) => m.id !== messageObj.id));
           } catch (error) {
             console.error("Error deleting message:", error);
             Alert.alert("Error", "Failed to delete message");
@@ -304,25 +336,25 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
   // Render message
   const renderItem = ({ item }: any) => {
     const isSentByMe = item.senderId === currentUserId;
-    
+
     return (
       <TouchableOpacity
         onLongPress={() => isSentByMe && handleDeleteMessage(item)}
         activeOpacity={0.7}
       >
-        <View style={[
-          styles.messageRow,
-          isSentByMe ? styles.myMessageRow : styles.theirMessageRow
-        ]}>
-          <View style={[
-            styles.messageBubble,
-            isSentByMe ? styles.myMessageBubble : styles.theirMessageBubble
-          ]}>
-            {isGroup && !isSentByMe && (
-              <Text style={styles.senderName}>
-                {item.senderName || "Unknown"}
-              </Text>
-            )}
+        <View
+          style={[
+            styles.messageRow,
+            isSentByMe ? styles.myMessageRow : styles.theirMessageRow,
+          ]}
+        >
+          <View
+            style={[
+              styles.messageBubble,
+              isSentByMe ? styles.myMessageBubble : styles.theirMessageBubble,
+            ]}
+          >
+            {isGroup && !isSentByMe && <Text style={styles.senderName}>{item.senderName || "Unknown"}</Text>}
             <Text style={styles.messageText}>{item.text}</Text>
           </View>
         </View>
@@ -338,6 +370,10 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
       </View>
     );
   }
+
+  // computed perms
+  const isAnnouncementOnly = !!groupData?.isAnnouncement;
+  const isAdmin = !!(groupData && (groupData.adminId === currentUserId || groupData.admin === currentUserId));
 
   return (
     <SafeAreaView style={styles.safeContainer}>
@@ -379,52 +415,62 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No messages yet</Text>
               <Text style={styles.emptySubtext}>
-                {groupData?.isAnnouncement 
-                  ? "Community announcements will appear here" 
-                  : "Start a conversation by sending a message"
-                }
+                {groupData?.isAnnouncement
+                  ? "Community announcements will appear here"
+                  : "Start a conversation by sending a message"}
               </Text>
             </View>
           }
         />
 
-        {/* Input Bar */}
+        {/* Input Bar / Announcement-only display */}
         {isGroup ? (
           isMember ? (
-            <View style={styles.bottomWrapper}>
-              <View style={styles.inputWrapper}>
-                <Icon name="emoticon-outline" size={24} color="gray" style={styles.iconLeft} />
-                <TextInput
-                  placeholder={
-                    groupData?.isAnnouncement 
-                      ? "Type an announcement..." 
-                      : "Message"
-                  }
-                  placeholderTextColor="#777"
-                  style={styles.textInput}
-                  value={message}
-                  onChangeText={setMessage}
-                  multiline
-                  editable={!groupData?.isAnnouncement || groupData?.adminId === currentUserId}
-                />
-                <Icon name="paperclip" size={22} color="gray" style={styles.iconRight} />
-                <Icon name="camera-outline" size={22} color="gray" style={styles.iconRight} />
+            // If group checking not finished, show small loader to avoid flicker
+            !groupChecked ? (
+              <View style={styles.bottomWrapper}>
+                <ActivityIndicator size="small" />
+                <Text style={{ marginLeft: 8 }}>Checking permissions...</Text>
               </View>
+            ) : // If announcement-only & user is NOT admin -> show text only (WhatsApp style)
+            isAnnouncementOnly && !isAdmin ? (
+              <View style={styles.announcementOnlyBar}>
+                <Text style={styles.announcementOnlyText}>Announcements only - Admins can post</Text>
+              </View>
+            ) : (
+              // Normal editable input area for admins or non-announcement groups
+              <View style={styles.bottomWrapper}>
+                <View style={styles.inputWrapper}>
+                  <Icon name="emoticon-outline" size={24} color="gray" style={styles.iconLeft} />
+                  <TextInput
+                    placeholder={isAnnouncementOnly ? "Type an announcement..." : "Message"}
+                    placeholderTextColor="#777"
+                    style={styles.textInput}
+                    value={message}
+                    onChangeText={setMessage}
+                    multiline
+                    editable={true}
+                  />
+                  <Icon name="paperclip" size={22} color="gray" style={styles.iconRight} />
+                  <Icon name="camera-outline" size={22} color="gray" style={styles.iconRight} />
+                </View>
 
-              <TouchableOpacity
-                style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
-                onPress={handleSend}
-                disabled={!message.trim()}
-              >
-                <Icon name="send" size={22} color="#fff" />
-              </TouchableOpacity>
-            </View>
+                <TouchableOpacity
+                  style={[styles.sendButton, !message.trim() && styles.sendButtonDisabled]}
+                  onPress={handleSend}
+                  disabled={!message.trim()}
+                >
+                  <Icon name="send" size={22} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            )
           ) : (
             <View style={styles.nonMemberNotice}>
               <Text style={styles.nonMemberText}>You're no longer a member of this group</Text>
             </View>
           )
         ) : (
+          // One-to-one chat input
           <View style={styles.bottomWrapper}>
             <View style={styles.inputWrapper}>
               <Icon name="emoticon-outline" size={24} color="gray" style={styles.iconLeft} />
@@ -464,9 +510,7 @@ const ChatDetailScreen = ({ route, navigation }: any) => {
           >
             <View style={styles.menuContainer}>
               <TouchableOpacity onPress={handleViewInfo} style={styles.menuItem}>
-                <Text style={styles.menuText}>
-                  {isGroup ? "Group Info" : "View Info"}
-                </Text>
+                <Text style={styles.menuText}>{isGroup ? "Group Info" : "View Info"}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleClearChat} style={styles.menuItem}>
                 <Text style={[styles.menuText, styles.destructiveText]}>Clear Chat</Text>
@@ -484,8 +528,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#ECE5DD",
   },
-  container: { 
-    flex: 1, 
+  container: {
+    flex: 1,
     backgroundColor: "#ECE5DD",
   },
   centeredContainer: {
@@ -648,6 +692,19 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: "#ccc",
+  },
+  // Announcement-only bottom bar (WhatsApp style): text only, centered, muted gray
+  announcementOnlyBar: {
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+  announcementOnlyText: {
+    color: "#999",
+    fontSize: 15,
   },
   modalOverlay: {
     flex: 1,
