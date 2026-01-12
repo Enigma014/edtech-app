@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Modal,
   TouchableWithoutFeedback,
   Alert,
+  TextInput, // Add this import
 } from "react-native";
 import firestore from "@react-native-firebase/firestore";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -40,10 +41,12 @@ type UserItem = {
 
 const Chat = ({ navigation }: { navigation: any }) => {
   const [chats, setChats] = useState<ChatItemType[]>([]);
+  const [filteredChats, setFilteredChats] = useState<ChatItemType[]>([]); // Add filtered state
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(""); // Add search query state
 
   useEffect(() => {
     const currentUser = auth().currentUser;
@@ -67,6 +70,7 @@ const Chat = ({ navigation }: { navigation: any }) => {
           (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)
         );
         setChats(sortedMerged);
+        setFilteredChats(sortedMerged); // Initialize filtered chats
         setLoading(false);
       }, summaryGroupIds);
     });
@@ -75,6 +79,20 @@ const Chat = ({ navigation }: { navigation: any }) => {
       unsubPersonal?.();
     };
   }, []);
+
+  // Add search functionality
+  useEffect(() => {
+    if (searchQuery.trim() === "") {
+      setFilteredChats(chats);
+    } else {
+      const query = searchQuery.toLowerCase().trim();
+      const filtered = chats.filter(chat => 
+        chat.name.toLowerCase().includes(query) ||
+        chat.lastMessage.toLowerCase().includes(query)
+      );
+      setFilteredChats(filtered);
+    }
+  }, [searchQuery, chats]);
 
   // Handle chat press - improved navigation
   const handleChatPress = async (item: ChatItemType) => {
@@ -142,8 +160,6 @@ const Chat = ({ navigation }: { navigation: any }) => {
 
   // Chat row component - simplified without swipe
   const ChatListItem = ({ item }: { item: ChatItemType }) => {
-    
-    
     const displayTime = (() => {
       try {
         const d = new Date(item.updatedAt);
@@ -172,13 +188,36 @@ const Chat = ({ navigation }: { navigation: any }) => {
           </Text>
         </View>
 
-       {item.unreadCount > 0 && (
-        <View style={styles.unreadBadge}>
-          <Text style={styles.unreadText}>{item.unreadCount}</Text>
-        </View>
-      )}
+        {item.unreadCount > 0 && (
+          <View style={styles.unreadBadge}>
+            <Text style={styles.unreadText}>{item.unreadCount}</Text>
+          </View>
+        )}
         <Text style={styles.chatTime}>{displayTime}</Text>
       </TouchableOpacity>
+    );
+  };
+
+  // Custom Search Component
+  const CustomSearchBox = () => {
+    return (
+      <View style={styles.searchContainer}>
+        <Icon name="magnify" size={20} color="#666" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search chats..."
+          placeholderTextColor="#999"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery("")} style={styles.clearButton}>
+            <Icon name="close-circle" size={18} color="#999" />
+          </TouchableOpacity>
+        )}
+      </View>
     );
   };
 
@@ -234,17 +273,36 @@ const Chat = ({ navigation }: { navigation: any }) => {
         </TouchableWithoutFeedback>
       )}
 
-      <SearchBox />
+      {/* Replace SearchBox with CustomSearchBox */}
+      <CustomSearchBox />
+
+      {/* Add search results info */}
+      {searchQuery.length > 0 && (
+        <View style={styles.searchInfo}>
+          <Text style={styles.searchInfoText}>
+            {filteredChats.length} {filteredChats.length === 1 ? 'result' : 'results'} for "{searchQuery}"
+          </Text>
+          {filteredChats.length === 0 && (
+            <Text style={styles.noResultsText}>No chats found</Text>
+          )}
+        </View>
+      )}
 
       <FlatList
-        data={chats}
+        data={filteredChats} // Use filteredChats instead of chats
         keyExtractor={(item) => item.id}
         renderItem={renderChatItem}
         contentContainerStyle={{ paddingBottom: 80 }}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No chats yet</Text>
-            <Text style={styles.emptySubtext}>Tap the + button to start a conversation</Text>
+            <Text style={styles.emptyText}>
+              {searchQuery.length > 0 ? 'No matching chats' : 'No chats yet'}
+            </Text>
+            <Text style={styles.emptySubtext}>
+              {searchQuery.length > 0 
+                ? 'Try a different search term'
+                : 'Tap the + button to start a conversation'}
+            </Text>
           </View>
         }
       />
@@ -259,6 +317,7 @@ const Chat = ({ navigation }: { navigation: any }) => {
 };
 
 const styles = StyleSheet.create({
+  // Existing styles...
   avatar: {
     width: 45,
     height: 45,
@@ -302,7 +361,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 12,
   },
-  
   loader: {
     flex: 1,
     justifyContent: "center",
@@ -388,6 +446,50 @@ const styles = StyleSheet.create({
     color: "#999",
     textAlign: "center",
     marginTop: 8,
+  },
+  // New search styles
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f2f2f2",
+    marginHorizontal: 15,
+    marginBottom: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    color: "#000",
+    paddingVertical: 0,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  searchInfo: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    backgroundColor: "#f8f8f8",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  searchInfoText: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+  },
+  noResultsText: {
+    fontSize: 14,
+    color: "#999",
+    fontStyle: "italic",
+    textAlign: "center",
+    marginTop: 4,
   },
 });
 
