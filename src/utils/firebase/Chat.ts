@@ -342,6 +342,7 @@ export async function sendMessage(
     createdAt: firestore.FieldValue.serverTimestamp(),
     isRead: false,
     messageType: fileData ? 'image' : 'text',
+    readBy: [senderId],
   };
 
   if (fileData) {
@@ -372,7 +373,12 @@ export async function sendMessage(
   if (chatType === 'group' || chatType === 'community') {
     const groupDoc = await firestore().collection('groups').doc(chatId).get();
     const members = groupDoc.exists() ? groupDoc.data()?.members || [] : [];
-
+    const unreadUpdates: Record<string, any> = {};
+    members.forEach((uid) => {
+      if (uid !== senderId) {
+        unreadUpdates[`unread_${uid}`] = firestore.FieldValue.increment(1);
+      }
+    });
     await summaryRef.set(
       {
         chatType,
@@ -383,6 +389,7 @@ export async function sendMessage(
         lastSender: senderId,
         lastMessageId: messageDocRef.id,
         lastTimestamp: firestore.FieldValue.serverTimestamp(),
+        ...unreadUpdates,
       },
       { merge: true },
     );
@@ -498,7 +505,7 @@ export async function markMessagesAsRead(chatId: string, currentUserId: string) 
   const summaryRef = firestore().collection("chatSummaries").doc(chatId);
 
   try {
-    // Reset unread count and mark last seen time
+    // ✅ Always reset badge counts
     await summaryRef.set(
       {
         [`unread_${currentUserId}`]: 0,
@@ -507,31 +514,58 @@ export async function markMessagesAsRead(chatId: string, currentUserId: string) 
       { merge: true }
     );
 
-    // Optionally mark unread messages as read (not required for the badge)
+    // ✅ Mark 1:1 messages read (your current method)
     const messagesRef = firestore()
       .collection("chats")
       .doc(chatId)
       .collection("messages");
 
-    const unreadSnapshot = await messagesRef
-      .where("receiverId", "==", currentUserId)
-      .where("isRead", "==", false)
-      .get();
+    const chatSummarySnap = await summaryRef.get();
+    const chatType = chatSummarySnap.exists() ? chatSummarySnap.data()?.chatType : "chat";
 
-    const batch = firestore().batch();
+    if (chatType === "chat") {
+      // ✅ 1:1
+      const unreadSnapshot = await messagesRef
+        .where("receiverId", "==", currentUserId)
+        .where("isRead", "==", false)
+        .get();
 
-    unreadSnapshot.forEach((docSnap) => {
-      batch.update(docSnap.ref, {
-        isRead: true,
-        readAt: firestore.FieldValue.serverTimestamp(),
+      const batch = firestore().batch();
+      unreadSnapshot.forEach((docSnap) => {
+        batch.update(docSnap.ref, {
+          isRead: true,
+          readAt: firestore.FieldValue.serverTimestamp(),
+        });
       });
-    });
 
-    await batch.commit();
+      await batch.commit();
+    } else {
+      // ✅ group/community → use readBy
+      const unreadGroupSnap = await messagesRef
+        .where("senderId", "!=", currentUserId)
+        .limit(200)
+        .get();
+
+      const batch = firestore().batch();
+
+      unreadGroupSnap.forEach((docSnap) => {
+        const data = docSnap.data() as any;
+        const readBy: string[] = Array.isArray(data.readBy) ? data.readBy : [];
+
+        if (!readBy.includes(currentUserId)) {
+          batch.update(docSnap.ref, {
+            readBy: firestore.FieldValue.arrayUnion(currentUserId),
+          });
+        }
+      });
+
+      await batch.commit();
+    }
   } catch (error) {
     console.error("Error marking messages as read:", error);
   }
 }
+
 
 
 /**

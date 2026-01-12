@@ -49,7 +49,7 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
       .collection('communities')
       .doc(id)
       .onSnapshot(async (doc) => {
-        if (doc.exists) {
+        if (doc.exists()) {
           const communityData = { id: doc.id, ...doc.data() };
           setCommunity(communityData);
           
@@ -99,92 +99,69 @@ const CommunityOverviewScreen: React.FC<CommunityOverviewScreenProps> = ({
     };
   }, [id, currentUser?.uid]);
 
-  // Fetch available users to add to community
-  // const fetchAvailableUsers = async () => {
-  //   try {
-  //     const usersSnapshot = await firestore().collection('users').get();
-  //     const allUsers = usersSnapshot.docs.map(doc => ({
-  //       id: doc.id,
-  //       ...doc.data()
-  //     }));
-      
-  //     // Filter out users who are already members
-  //     const available = allUsers.filter(user => 
-  //       !community.members.includes(user.id) && user.id !== currentUser?.uid
-  //     );
-      
-  //     setAvailableUsers(available);
-  //     setShowAddMembersModal(true);
-  //     setShowMenu(false);
-  //   } catch (error) {
-  //     console.error("Error fetching users:", error);
-  //     Alert.alert("Error", "Failed to load available users");
-  //   }
-  // };
-// In CommunityOverviewScreen.tsx - Fix the handleAddMember function
 const handleAddMember = async (user: any) => {
   try {
-    console.log("Adding user to community:", user);
+    if (!id) throw new Error("Community ID missing");
+
+    console.log("✅ Adding user:", user.id);
+    console.log("📝 Community ID:", id);
+    console.log("👤 User to add:", user.name, user.id);
+
+    // ✅ Use UPDATE with arrayUnion instead of SET with merge
+    await firestore()
+      .collection("communities")
+      .doc(id)
+      .update({
+        members: firestore.FieldValue.arrayUnion(user.id),
+        updatedAt: firestore.FieldValue.serverTimestamp(),
+      });
+
+    // ✅ Verify the update was successful
+    const verify = await firestore().collection("communities").doc(id).get();
+    const updatedMembers = verify.data()?.members || [];
     
-    // 1. Add to community members
-    const updatedMembers = [...community.members, user.id];
-    await firestore().collection('communities').doc(id).update({
-      members: updatedMembers,
-    });
+    console.log("✅ Updated members array:", updatedMembers);
+    console.log("✅ User added successfully:", updatedMembers.includes(user.id));
 
-    console.log("Added to community members");
-
-    // 2. Add to all groups in the community with proper error handling
-    const groupUpdatePromises = groups.map(async (group) => {
-      try {
+    // ✅ Add to all community groups
+    if (groups.length > 0) {
+      const groupPromises = groups.map(async (group) => {
         const groupId = group.groupId || group.id;
-        console.log("Processing group:", groupId, group.name);
+        console.log(`➕ Adding user to group: ${groupId}`);
         
-        const groupDoc = await firestore().collection('groups').doc(groupId).get();
-        
-        if (groupDoc.exists) {
-          const groupData = groupDoc.data();
-          const groupMembers = groupData?.members || [];
-          
-          // Check if user is already in the group
-          if (!groupMembers.includes(user.id)) {
-            const updatedGroupMembers = [...groupMembers, user.id];
-            
-            await firestore()
-              .collection('groups')
-              .doc(groupId)
-              .update({
-                members: updatedGroupMembers
-              });
-            
-            console.log(`Added to group: ${group.name}`);
-          } else {
-            console.log(`User already in group: ${group.name}`);
-          }
-        } else {
-          console.warn(`Group document not found: ${groupId}`);
-        }
-      } catch (groupError) {
-        console.error(`Error adding to group ${group.name}:`, groupError);
-        // Continue with other groups even if one fails
-      }
-    });
+        await firestore()
+          .collection("groups")
+          .doc(groupId)
+          .update({
+            members: firestore.FieldValue.arrayUnion(user.id),
+            updatedAt: firestore.FieldValue.serverTimestamp(),
+          });
+      });
+      
+      await Promise.all(groupPromises);
+      console.log("✅ User added to all groups");
+    }
 
-    await Promise.all(groupUpdatePromises);
-    
     setShowAddMembersModal(false);
-    Alert.alert("Success", `${user.name} added to the community and all groups`);
     
-  } catch (error) {
-    console.error("Error adding member:", error);
-    Alert.alert("Error", "Failed to add member to community");
+    // Refresh the community data
+    const communityDoc = await firestore().collection("communities").doc(id).get();
+    setCommunity(communityDoc.data());
+    
+    Alert.alert("Success", `${user.name} added to the community`);
+  } catch (error: any) {
+    console.error("❌ Error adding member:", error);
+    console.error("❌ Error details:", error.message, error.code);
+    Alert.alert("Error", error?.message || "Failed to add member");
   }
 };
+
 
 // Also fix the fetchAvailableUsers function to handle errors better
 const fetchAvailableUsers = async () => {
   try {
-    console.log("Fetching available users...");
+    console.log("🔍 Fetching available users...");
+    console.log("🏘️ Current community members:", community?.members);
     
     const usersSnapshot = await firestore().collection('users').get();
     const allUsers = usersSnapshot.docs.map(doc => ({
@@ -192,72 +169,39 @@ const fetchAvailableUsers = async () => {
       ...doc.data()
     }));
     
-    console.log("Total users found:", allUsers.length);
+    console.log("👥 Total users in system:", allUsers.length);
     
     // Filter out users who are already members
     const available = allUsers.filter(user => {
-      const isAlreadyMember = community.members.includes(user.id);
+      const isAlreadyMember = community?.members?.includes(user.id);
       const isCurrentUser = user.id === currentUser?.uid;
       
-      if (isAlreadyMember) {
-        console.log(`Filtering out ${user.name} - already a member`);
-      }
-      if (isCurrentUser) {
-        console.log(`Filtering out ${user.name} - current user`);
-      }
+      console.log(`User ${user.name} (${user.id}): 
+        Already member? ${isAlreadyMember}
+        Current user? ${isCurrentUser}
+        Available? ${!isAlreadyMember && !isCurrentUser}`);
       
       return !isAlreadyMember && !isCurrentUser;
     });
     
-    console.log("Available users after filtering:", available.length);
+    console.log("✅ Available users to add:", available.length);
+    console.log("📋 Available users list:", available.map(u => u.name));
+    
+    if (available.length === 0) {
+      Alert.alert("Info", "No users available to add. All users are already members.");
+      return;
+    }
+    
     setAvailableUsers(available);
     setShowAddMembersModal(true);
     setShowMenu(false);
     
   } catch (error) {
-    console.error("Error fetching users:", error);
+    console.error("❌ Error fetching users:", error);
     Alert.alert("Error", "Failed to load available users");
   }
 };
-  // Add member to community and all its groups
-  // const handleAddMember = async (user: any) => {
-  //   try {
-  //     // 1. Add to community members
-  //     const updatedMembers = [...community.members, user.id];
-  //     await firestore().collection('communities').doc(id).update({
-  //       members: updatedMembers,
-  //     });
 
-  //     // 2. Add to all groups in the community
-  //     const groupUpdatePromises = groups.map(async (group) => {
-  //       const groupId = group.groupId || group.id;
-  //       const groupDoc = await firestore().collection('groups').doc(groupId).get();
-        
-  //       if (groupDoc.exists) {
-  //         const groupData = groupDoc.data();
-  //         const groupMembers = groupData?.members || [];
-  //         const updatedGroupMembers = [...groupMembers, user.id];
-          
-  //         await firestore()
-  //           .collection('groups')
-  //           .doc(groupId)
-  //           .update({
-  //             members: updatedGroupMembers
-  //           });
-  //       }
-  //     });
-
-  //     await Promise.all(groupUpdatePromises);
-      
-  //     setShowAddMembersModal(false);
-  //     Alert.alert("Success", `${user.name} added to the community and all groups`);
-  //   } catch (error) {
-  //     console.error("Error adding member:", error);
-  //     Alert.alert("Error", "Failed to add member to community");
-  //   }
-  // };
-
-  // Make member admin
   const handleMakeAdmin = (member: any) => {
     Alert.alert(
       "Make Admin",
@@ -458,7 +402,7 @@ const fetchAvailableUsers = async () => {
                   .doc(group.groupId || group.id)
                   .get();
                 
-                if (groupDoc.exists) {
+                if (groupDoc.exists()) {
                   const groupData = groupDoc.data();
                   const updatedGroupMembers = groupData?.members?.filter(
                     (memberId: string) => memberId !== currentUser?.uid
@@ -549,6 +493,7 @@ const fetchAvailableUsers = async () => {
 
           {/* Menu Options */}
           {showMenu && (
+            
             <View style={styles.menuOptions}>
               {/* View Members */}
               <TouchableOpacity
@@ -583,11 +528,26 @@ const fetchAvailableUsers = async () => {
                   {isAdmin ? 'Transfer Admin & Exit' : 'Exit Community'}
                 </Text>
               </TouchableOpacity>
+                          
+
             </View>
+            
           )}
         </View>
       </View>
-
+      <TouchableOpacity
+  style={styles.livestreamButton}
+  onPress={() =>
+    navigation.navigate("LivestreamScreen", {
+      communityId: id,
+      communityName: community.name,
+      isAdmin,
+    })
+  }
+>
+  <Ionicons name="radio-outline" size={20} color="#fff" />
+  <Text style={styles.livestreamButtonText}>Livestream</Text>
+</TouchableOpacity>
       {/* Close menu when clicking outside */}
       {showMenu && (
         <TouchableOpacity 
@@ -889,6 +849,24 @@ const fetchAvailableUsers = async () => {
 };
 
 const styles = StyleSheet.create({
+  livestreamButton: {
+    marginHorizontal: 16,
+    marginBottom: 10,
+    marginTop: 10,
+    paddingVertical: 14,
+    backgroundColor: '#25D366',
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  livestreamButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  
   container: {
     flex: 1,
     backgroundColor: '#f2f2f2',

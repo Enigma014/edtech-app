@@ -1,0 +1,98 @@
+[debug] [2026-01-10T10:27:00.356Z] ----------------------------------------------------------------------
+[debug] [2026-01-10T10:27:00.357Z] Command:       /opt/homebrew/Cellar/node/24.10.0/bin/node /opt/homebrew/bin/firebase init functions
+[debug] [2026-01-10T10:27:00.357Z] CLI Version:   15.1.0
+[debug] [2026-01-10T10:27:00.357Z] Platform:      darwin
+[debug] [2026-01-10T10:27:00.357Z] Node Version:  v24.10.0
+[debug] [2026-01-10T10:27:00.357Z] Time:          Sat Jan 10 2026 15:57:00 GMT+0530 (India Standard Time)
+[debug] [2026-01-10T10:27:00.357Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-01-10T10:27:00.358Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  /Users/qaziizma/Desktop/edtech-app
+
+Before we get started, keep in mind:
+
+  * You are initializing within an existing Firebase project directory
+
+[info] 
+=== Project Setup
+[info] 
+[info] First, let's associate this project directory with a Firebase project.
+[info] You can create multiple project aliases by running firebase use --add, 
+[info] 
+[debug] [2026-01-10T10:27:01.171Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-01-10T10:27:01.171Z] > authorizing via signed-in user (qaziizmaa@gmail.com)
+[debug] [2026-01-10T10:27:01.171Z] Checked if tokens are valid: false, expires at: 1766354693448
+[debug] [2026-01-10T10:27:01.171Z] Checked if tokens are valid: false, expires at: 1766354693448
+[debug] [2026-01-10T10:27:01.171Z] > refreshing access token with scopes: []
+[debug] [2026-01-10T10:27:01.172Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-01-10T10:27:01.172Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-01-10T10:27:01.865Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-01-10T10:27:01.865Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-01-10T10:27:01.875Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/edtechapp-6f23f [none]
+[debug] [2026-01-10T10:27:02.517Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-01-10T10:27:02.517Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-01-10T10:27:02.535Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/edtechapp-6f23f 200
+[debug] [2026-01-10T10:27:02.535Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/edtechapp-6f23f {"projectId":"edtechapp-6f23f","projectNumber":"902152456401","displayName":"Edtechapp","name":"projects/edtechapp-6f23f","resources":{"hostingSite":"edtechapp-6f23f"},"state":"ACTIVE","etag":"1_5104b134-a870-4ee4-a822-0dd9a471c919"}
+[info] i  Using project edtechapp-6f23f (Edtechapp) . 
+[info] 
+=== Functions Setup
+[debug] [2026-01-10T10:27:02.543Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-01-10T10:27:02.543Z] > authorizing via signed-in user (qaziizmaa@gmail.com)
+[debug] [2026-01-10T10:27:02.543Z] [iam] checking project edtechapp-6f23f for permissions ["firebase.projects.get"]
+[debug] [2026-01-10T10:27:02.544Z] Checked if tokens are valid: true, expires at: 1768044420865
+[debug] [2026-01-10T10:27:02.544Z] Checked if tokens are valid: true, expires at: 1768044420865
+[debug] [2026-01-10T10:27:02.544Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/edtechapp-6f23f:testIamPermissions [none]
+[debug] [2026-01-10T10:27:02.544Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/edtechapp-6f23f:testIamPermissions x-goog-quota-user=projects/edtechapp-6f23f
+[debug] [2026-01-10T10:27:02.544Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/edtechapp-6f23f:testIamPermissions {"permissions":["firebase.projects.get"]}
+[debug] [2026-01-10T10:27:04.201Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/edtechapp-6f23f:testIamPermissions 200
+[debug] [2026-01-10T10:27:04.201Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/edtechapp-6f23f:testIamPermissions {"permissions":["firebase.projects.get"]}
+[info] 
+Detected existing codebase(s): default
+
+[info] Let's create a new codebase for your functions.
+[info] A directory corresponding to the codebase will be created in your project
+[info] with sample code pre-configured.
+
+[info] See https://firebase.google.com/docs/functions/organize-functions for
+[info] more information on organizing your functions using codebases.
+
+[info] Functions can be deployed with firebase deploy.
+
+[error] functions.codebase must be unique but 'default' was used more than once.
+[info] ✔  Wrote test/package.json 
+[info] ✔  Wrote test/.eslintrc.js 
+[info] ✔  Wrote test/index.js 
+[info] ✔  Wrote test/.gitignore 
+[info] 
+[error] NPM install failed, continuing with Firebase initialization...
+[info] 
+[debug] [2026-01-10T10:38:41.910Z] Error: ENOSPC: no space left on device, open '/Users/qaziizma/Desktop/edtech-app/firebase.json'
+    at Object.writeFileSync (node:fs:2415:20)
+    at Config.writeProjectFile (/opt/homebrew/lib/node_modules/firebase-tools/lib/config.js:168:12)
+    at postInitSaves (/opt/homebrew/lib/node_modules/firebase-tools/lib/commands/init.js:237:12)
+    at Command.initAction [as actionFn] (/opt/homebrew/lib/node_modules/firebase-tools/lib/commands/init.js:226:11)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[error] 
+[error] Error: An unexpected error has occurred.
+[debug] [2026-01-10T10:38:42.167Z] Error: ENOSPC: no space left on device, open '/Users/qaziizma/.config/configstore/firebase-tools.json.329400649'
+    at Object.openSync (node:fs:560:18)
+    at writeFile.writeFileSync [as sync] (/opt/homebrew/lib/node_modules/firebase-tools/node_modules/write-file-atomic/index.js:205:13)
+    at set all (/opt/homebrew/lib/node_modules/firebase-tools/node_modules/configstore/index.js:61:20)
+    at Configstore.set (/opt/homebrew/lib/node_modules/firebase-tools/node_modules/configstore/index.js:91:12)
+    at process.<anonymous> (/opt/homebrew/lib/node_modules/firebase-tools/lib/bin/cli.js:62:39)
+    at process.emit (node:events:520:35)
+    at process.exit (node:internal/process/per_thread:236:15)
+    at Timeout._onTimeout (/opt/homebrew/lib/node_modules/firebase-tools/lib/errorOut.js:20:17)
+    at listOnTimeout (node:internal/timers:608:17)
+    at process.processTimers (node:internal/timers:543:7)
+[error] 
+[error] Error: An unexpected error has occurred.

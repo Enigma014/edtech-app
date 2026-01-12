@@ -49,7 +49,7 @@ const RegisterScreen = ({ navigation }: Props) => {
       Alert.alert(
         'Verify Your Email',
         'A verification link has been sent to your email address. Please verify before logging in.',
-        [{ text: 'OK', onPress: () => navigation.navigate('LoginScreen') }]
+        [{ text: 'Continue to Subscription', onPress: () => navigation.navigate('Subscription') }]
       );
     } catch (err: any) {
       console.error('Registration error:', err);
@@ -117,7 +117,9 @@ const RegisterScreen = ({ navigation }: Props) => {
         <TouchableOpacity onPress={() => navigation.navigate('LoginScreen')}>
           <Text style={styles.link}>Login</Text>
         </TouchableOpacity>
-      </View>
+        </View>
+
+      
     </Background>
   );
 };
