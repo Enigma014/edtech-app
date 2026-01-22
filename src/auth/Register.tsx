@@ -49,7 +49,7 @@ const RegisterScreen = ({ navigation }: Props) => {
       Alert.alert(
         'Verify Your Email',
         'A verification link has been sent to your email address. Please verify before logging in.',
-        [{ text: 'Continue to Subscription', onPress: () => navigation.navigate('Subscription') }]
+        [{ text: 'Continue to Subscription', onPress: () => navigation.navigate('SubscriptionScreen') }]
       );
     } catch (err: any) {
       console.error('Registration error:', err);
